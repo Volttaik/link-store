@@ -27,6 +27,7 @@ export function ProfileCard({
   name,
   handle,
   avatarUrl,
+  avatarFit = "cover",
   caption,
   stats,
   actionLabel = "View profile",
@@ -38,6 +39,12 @@ export function ProfileCard({
   /** The @handle — shown under the name when there is one. */
   handle?: string | null;
   avatarUrl?: string | null;
+  /**
+   * How the avatar is framed. A person's photo fills the circle (`cover`); a
+   * shop's logo is a mark and keeps its own proportions (`contain`) — never
+   * stretched, never cropped.
+   */
+  avatarFit?: "contain" | "cover";
   /** One line of standing: what they are, where they are, since when. */
   caption?: ReactNode;
   stats?: ProfileStat[];
@@ -48,7 +55,13 @@ export function ProfileCard({
     <div className={`flex h-full flex-col gap-4 p-5 ${className ?? ""}`}>
       <div className="flex items-center gap-3.5">
         <Avatar className="size-14 shrink-0 rounded-full ring-2 ring-surface-secondary">
-          {avatarUrl ? <Avatar.Image alt={name} src={avatarUrl} /> : null}
+          {avatarUrl ? (
+            <Avatar.Image
+              alt={name}
+              className={avatarFit === "contain" ? "object-contain" : "object-cover"}
+              src={avatarUrl}
+            />
+          ) : null}
           <Avatar.Fallback>{name.slice(0, 2).toUpperCase()}</Avatar.Fallback>
         </Avatar>
 

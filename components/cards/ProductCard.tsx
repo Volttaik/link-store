@@ -84,7 +84,11 @@ export function ProductCard({
         >
           <Avatar className="size-6 shrink-0 rounded-lg">
             {listing.storeLogoUrl ? (
-              <Avatar.Image alt={listing.storeName} src={listing.storeLogoUrl} />
+              <Avatar.Image
+                alt={listing.storeName}
+                className="object-contain"
+                src={listing.storeLogoUrl}
+              />
             ) : null}
             <Avatar.Fallback className="rounded-lg">
               {listing.storeName.slice(0, 1).toUpperCase()}

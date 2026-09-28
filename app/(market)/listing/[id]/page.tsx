@@ -261,7 +261,11 @@ export default async function ListingDetailPage({
               <div className="flex flex-row items-center gap-4">
                 <Avatar size="lg">
                   {detail.storeLogoUrl ?? undefined ? (
-                  <Avatar.Image alt="" src={detail.storeLogoUrl ?? undefined} />
+                  <Avatar.Image
+                    alt=""
+                    className="object-contain"
+                    src={detail.storeLogoUrl ?? undefined}
+                  />
                   ) : null}
                   <Avatar.Fallback>{detail.storeName.slice(0, 2).toUpperCase()}</Avatar.Fallback>
                 </Avatar>

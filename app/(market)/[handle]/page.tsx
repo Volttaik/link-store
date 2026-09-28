@@ -85,6 +85,8 @@ export default async function StorefrontPage({
   /**
    * The image whose hue the storefront header takes its atmosphere from: the
    * seller's own banner or logo first, then the first product they published.
+   * Only used when there is no cover — a cover fills the header as the real
+   * image and the ambient wash stands down for it.
    */
   const tintSource =
     store.banner_url ??
@@ -100,30 +102,42 @@ export default async function StorefrontPage({
         id="storefront-header"
         className="ls-tone bg-surface ls-elev-2"
         patternClassName="text-accent/10"
-        tintSrc={tintSource}
+        tintSrc={store.banner_url ? null : tintSource}
         tintStrength={0.8}
       >
-        {/* The shop's own cover, behind its identity: name, mark and details
-            sit on top of it, kept legible by a soft scrim. */}
+        {/*
+          The shop's own cover, behind its identity: name, mark and details sit
+          on top of it, kept legible by a light scrim. The cover paints above
+          the ambient tint and pattern layers, so nothing decorative washes
+          over the seller's photograph, and the scrim is only what the overlaid
+          text needs — the image itself stays clearly visible.
+        */}
         {store.banner_url ? (
-          <div aria-hidden="true" className="absolute inset-0 -z-20 overflow-hidden">
+          <div aria-hidden="true" className="absolute inset-0 z-0 overflow-hidden">
             <img
               alt=""
               className="h-full w-full object-cover"
               loading="lazy"
               src={store.banner_url}
             />
-            <div className="absolute inset-0 bg-gradient-to-r from-surface via-surface/85 to-surface/35" />
+            <div className="absolute inset-0 bg-surface/40 sm:bg-transparent sm:bg-gradient-to-r sm:from-surface/85 sm:via-surface/55 sm:to-surface/10" />
           </div>
         ) : null}
         {/* The shop's pop: the orb motif large in the corner while the shop's
-            own colour washes the surface — every storefront feels like itself. */}
-        <ThreeOrbs className="absolute -top-8 right-2 -z-10 h-56 w-56 opacity-70 sm:h-72 sm:w-72" />
-        <div className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6">
+            own colour washes the surface — every storefront feels like itself.
+            When a cover is uploaded, the cover is the statement and the orbs
+            stand down so they never sit over the seller's photograph. */}
+        {store.banner_url ? null : (
+          <ThreeOrbs className="absolute -top-8 right-2 -z-10 h-56 w-56 opacity-70 sm:h-72 sm:w-72" />
+        )}
+        <div className="relative z-10 mx-auto w-full max-w-7xl px-4 py-10 sm:px-6">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
+            {/* A logo is a mark, never a photograph: `object-contain` keeps its
+                original proportions — square stays square, wide stays wide —
+                and nothing is stretched or cropped. */}
             <Avatar size="lg" className="h-20 w-20 shrink-0 text-xl">
               {store.logo_url ?? undefined ? (
-              <Avatar.Image alt="" src={store.logo_url ?? undefined} />
+              <Avatar.Image alt="" className="object-contain" src={store.logo_url ?? undefined} />
               ) : null}
               <Avatar.Fallback>{store.name.slice(0, 2).toUpperCase()}</Avatar.Fallback>
             </Avatar>
@@ -272,6 +286,7 @@ export default async function StorefrontPage({
                     handle={neighbour.slug}
                     href={`/@${neighbour.slug}`}
                     name={neighbour.name}
+                    avatarFit="contain"
                     stats={[
                       { value: neighbour.publishedListingCount, label: "items" },
                       { value: formatRelative(neighbour.createdAt), label: "joined" },

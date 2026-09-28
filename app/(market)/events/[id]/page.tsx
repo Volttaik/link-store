@@ -249,7 +249,11 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
               <Card.Content className="flex flex-row items-center gap-3">
                 <Avatar size="md">
                   {event.storeLogoUrl ?? undefined ? (
-                  <Avatar.Image alt="" src={event.storeLogoUrl ?? undefined} />
+                  <Avatar.Image
+                    alt=""
+                    className="object-contain"
+                    src={event.storeLogoUrl ?? undefined}
+                  />
                   ) : null}
                   <Avatar.Fallback>{event.storeName.slice(0, 2).toUpperCase()}</Avatar.Fallback>
                 </Avatar>

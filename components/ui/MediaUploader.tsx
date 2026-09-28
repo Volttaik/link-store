@@ -66,9 +66,10 @@ function putDirect(
 
     request.onload = () => {
       if (request.status >= 200 && request.status < 300) resolve();
-      else reject(new Error(`Direct upload failed (${request.status}).`));
+      else reject(new Error("The upload could not be completed. Please try again."));
     };
-    request.onerror = () => reject(new Error("Network error during direct upload."));
+    request.onerror = () =>
+      reject(new Error("The upload was interrupted. Check your connection and try again."));
     request.send(file);
   });
 }
@@ -105,7 +106,8 @@ function streamThroughServer(
       }
     };
 
-    request.onerror = () => reject(new Error("Network error during upload."));
+    request.onerror = () =>
+      reject(new Error("The upload was interrupted. Check your connection and try again."));
     request.send(body);
   });
 }
@@ -318,12 +320,22 @@ export function SingleImageUploader({
   folder,
   label = "Upload image",
   purpose = "store",
+  fit = "cover",
+  previewClassName = "h-16 w-16",
 }: {
   value: string | null;
   onChange: (image: UploadedImage | null) => void;
   folder: string;
   label?: string;
   purpose?: "store" | "avatar";
+  /**
+   * How the preview frames the image. `contain` keeps the whole image at its
+   * own proportions — logos and marks, never stretched or cropped. `cover`
+   * fills the frame the way a cover region does on the storefront.
+   */
+  fit?: "contain" | "cover";
+  /** Size/shape of the preview frame. Covers read best in a wide frame. */
+  previewClassName?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -354,9 +366,17 @@ export function SingleImageUploader({
     <div className="space-y-2">
       <div className="flex items-center gap-3">
         {value ? (
-          <img alt="" src={value} className="h-16 w-16 rounded-xl object-cover" />
+          <img
+            alt=""
+            src={value}
+            className={`${previewClassName} rounded-xl ${
+              fit === "contain" ? "object-contain" : "object-cover"
+            }`}
+          />
         ) : (
-          <div className="flex h-16 w-16 items-center justify-center rounded-md border border-dashed border-border text-muted">
+          <div
+            className={`flex ${previewClassName} items-center justify-center rounded-md border border-dashed border-border text-muted`}
+          >
             –
           </div>
         )}

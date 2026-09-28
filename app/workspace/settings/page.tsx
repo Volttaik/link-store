@@ -19,7 +19,6 @@ import { getUserProfile, requireStore } from "@/lib/auth";
 import { isPaystackConfigured, paystackConfig } from "@/lib/env";
 import { formatDateTime } from "@/lib/format";
 import { getStoreSettings, storeIsPublished, storeSocials } from "@/lib/server/stores";
-import { storageStatus } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +46,6 @@ export default async function SettingsPage({
   const tab = TABS.some((entry) => entry.key === params.tab) ? (params.tab as string) : "store";
 
   const [profile, settings] = await Promise.all([getUserProfile(user.id), getStoreSettings(store.id)]);
-  const storage = storageStatus();
   const isPublished = storeIsPublished(store);
 
   return (
@@ -130,27 +128,6 @@ export default async function SettingsPage({
               
               <Card.Content>
                 <DesignTypeForm designType={settings.design_type} />
-              </Card.Content>
-            </Card>
-
-            <Card className="ls-elev-2">
-              <Card.Header className="flex-col items-start gap-1">
-                <h2 className="text-lg font-semibold">File storage</h2>
-                <p className="text-sm text-muted">Where your uploads are kept.</p>
-              </Card.Header>
-              
-              <Card.Content className="gap-3">
-                <StatusChip
-                  label={storage.driver === "r2" ? "Cloudflare R2" : "Local disk"}
-                  tone={storage.configured ? "success" : "warning"}
-                />
-                <p className="text-sm text-muted">{storage.message}</p>
-                {!storage.configured ? (
-                  <InfoNote title="Development storage">
-                    Uploads still work right now — files are written under <code>./storage</code> and served
-                    through this app. Configure R2 before going live so uploads survive deploys.
-                  </InfoNote>
-                ) : null}
               </Card.Content>
             </Card>
           </div>

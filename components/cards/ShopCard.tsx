@@ -55,7 +55,11 @@ export function ShopCard({
         {/* Identity — the sign, the name and the window card. */}
         <div className="-mt-8 flex items-end gap-3">
           <Avatar className="size-16 shrink-0 rounded-2xl ring-4 ring-surface">
-            {store.logoUrl ? <Avatar.Image alt={store.name} src={store.logoUrl} /> : null}
+            {/* Logos keep their own proportions — contained, never stretched
+                or cropped into the plate. */}
+            {store.logoUrl ? (
+              <Avatar.Image alt={store.name} className="object-contain" src={store.logoUrl} />
+            ) : null}
             <Avatar.Fallback className="rounded-2xl text-base">
               {store.name.slice(0, 2).toUpperCase()}
             </Avatar.Fallback>

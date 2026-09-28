@@ -12,7 +12,6 @@ import {
   updateStoreSettings,
 } from "@/lib/server/stores";
 import { parseMoneyToMinor } from "@/lib/money";
-import { storageStatus } from "@/lib/storage";
 import { normalizeHandle } from "@/lib/slug";
 import { isShopDesignType } from "@/lib/catalog";
 import type { ActionResult } from "@/lib/types";
@@ -329,12 +328,4 @@ export async function deleteCategoryAction(
 
   revalidatePath("/workspace/categories");
   return ok(undefined);
-}
-
-/** Surface storage configuration state to the settings UI. */
-export async function getStorageStatusAction() {
-  const user = await getCurrentUser();
-  if (!user) return { driver: "local" as const, configured: false, message: "Not signed in." };
-
-  return storageStatus();
 }

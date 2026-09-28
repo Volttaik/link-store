@@ -152,6 +152,7 @@ export function StoreProfileForm({
           <SingleImageUploader
             value={logoUrl}
             onChange={(image) => setLogoUrl(image?.url ?? null)}
+            fit="contain"
             folder="store"
             label="Upload logo"
           />
@@ -169,6 +170,7 @@ export function StoreProfileForm({
             onChange={(image) => setBannerUrl(image?.url ?? null)}
             folder="store"
             label="Upload cover"
+            previewClassName="h-16 w-28"
           />
           <input name="bannerUrl" type="hidden" value={bannerUrl ?? ""} />
         </div>

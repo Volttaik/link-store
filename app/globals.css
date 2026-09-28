@@ -1,0 +1,1639 @@
+/* Tailwind CSS v4 — must be imported first. */
+@import "tailwindcss";
+
+/* HeroUI v3 — components, semantic tokens and the light/dark themes.
+   Imported after Tailwind, exactly as HeroUI documents. */
+@import "@heroui/styles";
+
+/* ---------------------------------------------------------------------------
+ * Nothing in the app shows a scrollbar.
+ *
+ * Scrollbars cut a hard line through surfaces that are meant to read as one
+ * plane, and every region that scrolls here is a considered part of a layout
+ * rather than a document. Scrolling still works everywhere — the indicator is
+ * simply never drawn. Edge fade, where it is needed, is done per surface with
+ * masks, not with a scrollbar.
+ * ------------------------------------------------------------------------- */
+html {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+/* ---------------------------------------------------------------------------
+ * Nothing scrolls sideways.
+ *
+ * One element wider than the viewport widens the layout viewport on a phone,
+ * which makes a browser zoom the whole page out — the "everything looks
+ * malformed and out of proportion" effect — and drags every fixed, centred
+ * element (the bottom navigation) off the screen until you pan back.
+ *
+ * Guarding the page keeps a single wide row from deforming the entire platform.
+ * `clip` rather than `hidden`: it does not create a scroll container, so the
+ * sticky workspace header and `position: fixed` navigation keep working, and an
+ * element that is too wide is simply cut off at the edge instead of moving the
+ * page underneath the reader.
+ * ------------------------------------------------------------------------- */
+html,
+body {
+  overflow-x: clip;
+  max-width: 100%;
+}
+
+html::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Type weight.
+ *
+ * Every surface reads at medium (500) rather than regular. Against tinted,
+ * image-driven surfaces the lighter weight washed out, and single-line labels —
+ * a price, a status, a destination — were the first thing to disappear. Weight
+ * is inherited, so this lifts the floor everywhere at once while headings and
+ * emphasised values keep the heavier weights they set themselves: the
+ * hierarchy is unchanged, the text is simply easier to see.
+ * ------------------------------------------------------------------------- */
+body {
+  font-weight: 500;
+}
+
+/* ---------------------------------------------------------------------------
+ * A pending button shows that it is working.
+ *
+ * HeroUI's `isPending` is real but silent. React Aria sets `aria-disabled`,
+ * marks the element `data-pending="true"`, blocks the pointer, suppresses an
+ * implicit form submit and announces the state to assistive technology — and
+ * then draws nothing at all. HeroUI's own `status-pending` is `pointer-events:
+ * none` and nothing more, so a button waiting on a request looked exactly like
+ * a button that had simply been pressed. Every `isPending` in the app was
+ * therefore invisible: the work happened, the feedback did not.
+ *
+ * The ring is drawn here rather than added to the markup, because HeroUI's
+ * button already lays its children out in a row with a gap — this becomes a
+ * leading flex item for free, at every one of the call sites, and it cannot
+ * double up on a button that renders a spinner of its own. It is sized in `em`,
+ * so it follows the button's own type scale rather than the height of any one
+ * size, and it inherits `currentColor`, so it is legible on every variant
+ * without being told which one it is on.
+ *
+ * The ring is drawn at full strength and the label is lifted off it slightly:
+ * at 0.65 opacity on a 12px ring the state was technically there and practically
+ * invisible, which is the same as not having it. It is still small enough not to
+ * shift the button's width — the point is to be unmistakable, not loud.
+ * ------------------------------------------------------------------------- */
+.button[data-pending="true"]::before {
+  content: "";
+  flex: none;
+  width: 0.95em;
+  height: 0.95em;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  opacity: 1;
+  animation: ls-spin 0.7s linear infinite;
+}
+
+/* The label steps back while the ring turns, so the control reads as busy at a
+   glance rather than as a button that has simply been pressed. */
+.button[data-pending="true"] {
+  opacity: 0.9;
+}
+
+/* Slowed rather than stopped: a ring that does not turn reads as a broken
+   control, and the state still has to be visible. */
+@media (prefers-reduced-motion: reduce) {
+  .button[data-pending="true"]::before {
+    animation-duration: 1.6s;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * The Workspace side menu — two sections, side by side, one stable geometry.
+ *
+ * SECTION A (main navigation) and SECTION B (the secondary / sub-navigation
+ * display) are structurally independent regions of one sidebar container:
+ *
+ *     Sidebar container
+ *       ├─ head   — identity, store state and the menu's search (fixed)
+ *       └─ body   — one strict two-track grid
+ *            ├─ nav     — SECTION A: a fixed-width rail of icon-forward tiles
+ *            └─ display — SECTION B: the picked area's surface, in the
+ *                         flexible track (the controlled layout region)
+ *
+ * The grid is the guarantee the design demands: SECTION A's track is *fixed*,
+ * so no button — however long its label, however many destinations exist — can
+ * ever widen, resize or push the secondary section toward the edge of the
+ * sidebar. Labels truncate to one line with the full name in the tooltip, and
+ * the rail scrolls inside its own region.
+ *
+ * The tiles are icon-forward with controlled dimensions: a large icon and a
+ * small label inside a fixed-size button — never a stretched bar that dwarfs
+ * its own icon. SECTION B fills the flexible track and scrolls internally, so
+ * the composition is identical at three listings and at forty orders.
+ * ------------------------------------------------------------------------- */
+.ls-menu {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  gap: 0.7rem;
+}
+
+.ls-menu > [data-area="head"] {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+/* The body: the two sections, side by side. */
+.ls-menu > [data-area="body"] {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 5.25rem minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+/* SECTION A — the main navigation rail: a fixed track. The tiles scroll inside
+   it, so any number of destinations changes nothing outside the rail. */
+.ls-menu [data-area="nav"] {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ls-menu [data-menu-list] {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+/* SECTION B — the secondary / sub-navigation area, in the flexible track.
+   Structurally independent of SECTION A; it scrolls internally and can never be
+   moved by the navigation beside it. */
+.ls-menu [data-area="display"] {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ls-menu [data-area="display"] > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Motion.
+ *
+ * Small entrances, used only where content actually arrives or changes: a feed
+ * appearing, a card settling in, a popover opening. Everything is short, eased
+ * out, and opt-in per element — always via Tailwind's `motion-safe:` variant so
+ * anyone who has asked their system for reduced motion gets the final state
+ * straight away.
+ * ------------------------------------------------------------------------- */
+@theme {
+  --animate-rise: ls-rise 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+  /* Contextual card entrances use `backwards`, never `both`: a filled-forward
+     transform would keep overriding the card's own hover lift after the
+     entrance finished (see `ls-deal-grid` below). */
+  --animate-bubble: ls-bubble-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  --animate-ticket: ls-ticket-in 0.55s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  --animate-settle: ls-settle 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-tint-in: ls-tint-in 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-atmosphere-out: ls-atmosphere-out 1.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-segment: ls-segment-in 0.46s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-focus-in: ls-focus-in 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes ls-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ls-settle {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/*
+ * The adaptive tint fades in once the dominant hue of an image is known, so a
+ * storefront picks up its atmosphere rather than snapping to it.
+ */
+@keyframes ls-tint-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/*
+ * The outgoing atmosphere, cross-faded behind the incoming one so the shift is a
+ * change of light rather than a change of layer.
+ */
+@keyframes ls-atmosphere-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/*
+ * A contextual card moving into place when the selected area changes: the new
+ * card rises into position while the old one is gone, so the side menu reads as
+ * segments sliding past each other rather than content being swapped.
+ */
+@keyframes ls-segment-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.982);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/*
+ * Content arriving into focus: the new view sharpens in from a slight blur while
+ * what it replaced is already gone, so moving between areas reads as the eye
+ * refocusing rather than a page being swapped.
+ */
+@keyframes ls-focus-in {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+/*
+ * Rearrangement — cards finding their new places when the interface reorganises
+ * around a selection. Arrivals fade up a few pixels; departures fade out where
+ * they stood. Both are transform/opacity only, so a reorganisation costs almost
+ * nothing and never feels like the page reloading.
+ */
+@keyframes ls-rearrange-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ls-rearrange-exit {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+/* The ring a pending button turns. */
+@keyframes ls-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ===========================================================================
+ * LINK STORE — the visual system: ACCENT TRIO IN A NEUTRAL SPACE.
+ *
+ * The platform lives in **neutral space**: white surfaces, glass chrome for the
+ * always-visible furniture (header, bottom navigation, workspace menu), and
+ * violet-tinted near-black ink. The interface itself is deliberately quiet.
+ *
+ * All of the platform's *colour* is the accent trio:
+ *
+ *     light violet (iris)  +  a touch of dark violet (iris-deep)  +  amber milk
+ *
+ * and it lives almost entirely in **accents and SVG design** — the arcs on a
+ * card's edge, the flourish around an important button, the quiet geometry
+ * behind a section, the small mark on the active destination. Main components
+ * stay neutral; the *design elements* carry the colour. The result is a mostly
+ * monochrome interface where the identity glows at the edges.
+ *
+ * Depth comes from three tools, in this order:
+ *
+ * 1. **Typography** — near-black ink on white; weight and scale carry the
+ *    hierarchy first.
+ * 2. **Layered surfaces** — background vs surface vs surface-secondary, and
+ *    glass where chrome must stay transparent; sections separate by tone and
+ *    elevation, never by rule lines.
+ * 3. **Elevation** — one subtle, violet-tilted shadow scale (`--ls-elev-*`).
+ *    Shadows replace borders as the way "this is a raised/floating/active
+ *    element" is communicated.
+ *
+ * There is no line work and no 3D. The decorative vocabulary is two things:
+ * **orbs** — the three-orb motif, filled gradient circles placed as quiet
+ * environment (`components/visual/Atmosphere.tsx`) — and **moving edges**, the
+ * accent trio travelling around the perimeter of active controls and cards
+ * (the `.ls-edge` family below). Both are minimal, absolutely positioned or
+ * pseudo-element based, and never able to push, resize or reposition UI.
+ *
+ * These are plain CSS variables on purpose: SVG gradients resolve their stops
+ * from the tiny `.ls-grad-*` classes below, and everything else in the app
+ * inherits the identity through the HeroUI token re-pointing.
+ * ======================================================================== */
+
+/* ---- Dark purple + support (light) --------------------------------------- */
+:root,
+.light,
+.default,
+[data-theme="light"],
+[data-theme="default"] {
+  /* The accent trio — the platform's only colour. Accents and SVG design:
+     light violet, a touch of dark violet, then amber milk. */
+  --ls-iris: oklch(0.79 0.105 292); /* light violet — the main accent */
+  --ls-iris-deep: oklch(0.45 0.125 289); /* a touch of dark violet */
+  --ls-iris-soft: oklch(0.9 0.05 295); /* the light violet, thinned */
+  --ls-milk: oklch(0.93 0.05 85); /* amber milk */
+  --ls-snow: oklch(0.985 0.004 292);
+
+  /* Neutral dark — a violet-tinted near-black. Buttons and strong ink live
+     here so the interface keeps its weight without spending its colour. */
+  --ls-ink: oklch(0.24 0.03 290);
+  --ls-ink-soft: oklch(0.32 0.045 290);
+
+  /* The accent trio as one subtle gradient — for SVG strokes and small
+     design elements only. */
+  --ls-gradient-trio: linear-gradient(
+    135deg,
+    var(--ls-iris) 0%,
+    var(--ls-iris-deep) 45%,
+    var(--ls-milk) 100%
+  );
+  --ls-gradient-accent: var(--ls-gradient-trio);
+
+  /* Neutral ink gradients — the important button. */
+  --ls-gradient-ink: linear-gradient(180deg, var(--ls-ink-soft) 0%, var(--ls-ink) 100%);
+  --ls-gradient-ink-hover: linear-gradient(
+    180deg,
+    oklch(0.38 0.05 290) 0%,
+    oklch(0.28 0.035 290) 100%
+  );
+
+  /* The depth layer: one carefully positioned wash of the trio at low strength
+     behind page sections. A single soft span — never a cluster of blobs. */
+  --ls-gradient-depth: linear-gradient(
+    165deg,
+    color-mix(in oklab, var(--ls-iris) 10%, transparent) 0%,
+    transparent 42%,
+    color-mix(in oklab, var(--ls-milk) 18%, transparent) 100%
+  );
+
+  /* Very subtle purple-tinted shadows. The elevation system: shadows, not
+     borders, say "raised / floating / active". */
+  --ls-elev-1:
+    0 1px 2px oklch(0.22 0.06 292 / 0.05),
+    0 1px 3px oklch(0.22 0.06 292 / 0.04);
+  --ls-elev-2:
+    0 2px 4px oklch(0.22 0.06 292 / 0.05),
+    0 6px 16px oklch(0.22 0.06 292 / 0.06);
+  --ls-elev-3:
+    0 4px 8px oklch(0.22 0.06 292 / 0.06),
+    0 16px 36px oklch(0.22 0.06 292 / 0.09);
+  --ls-elev-float:
+    0 8px 24px oklch(0.22 0.06 292 / 0.12),
+    0 2px 6px oklch(0.22 0.06 292 / 0.07);
+  /* A hair of soft highlight along the top edge of glass and accents. */
+  --ls-highlight: color-mix(in oklab, var(--ls-milk) 60%, white);
+}
+
+/* ---- Dark purple + light space → the UI tokens (light) ------------------- */
+:root,
+.light,
+.default,
+[data-theme="light"],
+[data-theme="default"] {
+  /* Light space: a clean near-white ground; pure white surfaces on top. */
+  --background: oklch(0.968 0.006 292);
+  --foreground: oklch(0.19 0.02 292); /* near-black violet ink */
+  --surface: oklch(0.992 0.002 292); /* white surface */
+  --surface-foreground: var(--foreground);
+  --surface-secondary: oklch(0.955 0.008 295); /* soft lavender-grey */
+  --surface-tertiary: oklch(0.928 0.014 296);
+  --overlay: oklch(0.995 0.002 292);
+  --overlay-foreground: var(--foreground);
+  --muted: oklch(0.5 0.025 297); /* violet-grey */
+  --default: oklch(0.945 0.01 295);
+  --default-foreground: var(--foreground);
+  --border: oklch(0.9 0.012 295); /* kept only where a boundary is functional */
+  --separator: oklch(0.93 0.008 295);
+  --segment: oklch(0.955 0.008 295);
+  --segment-foreground: var(--foreground);
+
+  --field-background: oklch(0.995 0.002 292);
+  --field-foreground: var(--foreground);
+  --field-placeholder: var(--muted);
+  --field-border: oklch(0.905 0.014 296);
+
+  /* Controls, focus and links carry the accent — light violet where it is a
+     small tint, the deep touch where legibility matters (focus, links). */
+  --accent: var(--ls-iris);
+  --accent-foreground: var(--ls-ink);
+  --focus: var(--ls-iris-deep);
+  --link: var(--ls-iris-deep);
+
+  /* Shadows → the elevation system (see above). */
+  --surface-shadow: var(--ls-elev-2);
+  --overlay-shadow: var(--ls-elev-float);
+  --field-shadow: var(--ls-elev-1);
+
+  --snow: var(--ls-snow);
+  --eclipse: var(--ls-ink);
+}
+
+/* ---- Dark purple + support (dark) ---------------------------------------- */
+.dark,
+[data-theme="dark"] {
+  --ls-iris: oklch(0.72 0.11 295);
+  --ls-iris-deep: oklch(0.5 0.135 289);
+  --ls-iris-soft: oklch(0.58 0.08 296);
+  --ls-milk: oklch(0.85 0.06 85);
+  --ls-snow: oklch(0.955 0.01 292);
+
+  --ls-ink: oklch(0.93 0.015 290); /* in dark mode the ink is snow */
+  --ls-ink-soft: oklch(0.85 0.02 290);
+
+  --ls-gradient-trio: linear-gradient(
+    135deg,
+    var(--ls-iris) 0%,
+    var(--ls-iris-deep) 45%,
+    var(--ls-milk) 100%
+  );
+  --ls-gradient-accent: var(--ls-gradient-trio);
+
+  --ls-gradient-ink: linear-gradient(180deg, oklch(0.26 0.05 292) 0%, oklch(0.18 0.035 292) 100%);
+  --ls-gradient-ink-hover: linear-gradient(180deg, oklch(0.32 0.06 292) 0%, oklch(0.23 0.045 292) 100%);
+
+  --ls-gradient-depth: linear-gradient(
+    165deg,
+    color-mix(in oklab, var(--ls-iris) 14%, transparent) 0%,
+    transparent 44%,
+    color-mix(in oklab, var(--ls-milk) 10%, transparent) 100%
+  );
+
+  --ls-elev-1:
+    0 1px 2px oklch(0.08 0.03 292 / 0.35),
+    0 1px 3px oklch(0.08 0.03 292 / 0.25);
+  --ls-elev-2:
+    0 2px 4px oklch(0.08 0.03 292 / 0.35),
+    0 6px 16px oklch(0.08 0.03 292 / 0.3);
+  --ls-elev-3:
+    0 4px 8px oklch(0.08 0.03 292 / 0.4),
+    0 16px 36px oklch(0.08 0.03 292 / 0.38);
+  --ls-elev-float:
+    0 8px 24px oklch(0.08 0.03 292 / 0.45),
+    0 2px 6px oklch(0.08 0.03 292 / 0.35);
+  --ls-highlight: color-mix(in oklab, var(--ls-milk) 45%, white);
+}
+
+/* ---- UI tokens (dark) ---------------------------------------------------- */
+.dark,
+[data-theme="dark"] {
+  --background: oklch(0.16 0.035 292); /* deep violet-black space */
+  --foreground: oklch(0.95 0.01 292); /* snow ink */
+  --surface: oklch(0.205 0.045 292); /* dark purple surface */
+  --surface-foreground: var(--foreground);
+  --surface-secondary: oklch(0.255 0.055 294);
+  --surface-tertiary: oklch(0.3 0.065 295);
+  --overlay: oklch(0.22 0.05 293);
+  --overlay-foreground: var(--foreground);
+  --muted: oklch(0.7 0.03 297);
+  --default: oklch(0.27 0.05 294);
+  --default-foreground: var(--foreground);
+  --border: oklch(0.33 0.05 295);
+  --separator: oklch(0.28 0.045 295);
+  --segment: oklch(0.3 0.055 295);
+  --segment-foreground: var(--foreground);
+
+  --field-background: oklch(0.225 0.05 293);
+  --field-foreground: var(--foreground);
+  --field-placeholder: var(--muted);
+  --field-border: oklch(0.34 0.055 295);
+
+  --accent: var(--ls-iris);
+  --accent-foreground: var(--ls-ink);
+  --focus: var(--ls-iris);
+  --link: var(--ls-iris);
+
+  --surface-shadow: var(--ls-elev-2);
+  --overlay-shadow: var(--ls-elev-float);
+  --field-shadow: var(--ls-elev-1);
+
+  --snow: var(--ls-snow);
+  --eclipse: var(--ls-ink);
+}
+
+/* ---------------------------------------------------------------------------
+ * The elevation system — shadows replace borders.
+ *
+ * Raised cards, floating panels, menus, active controls and important
+ * interactive elements are communicated with soft, purple-tinted shadows
+ * instead of outlines. Never heavy: a shadow here is the quietest possible way
+ * to say "this sits above that", and the purple tilt is deliberate — the depth
+ * belongs to the identity.
+ *
+ * `.ls-lift` is the interactive member of the family: a raised element that
+ * answers hover and press with more depth and a small movement, so an
+ * interactive surface is recognisable by its behaviour as well as its look.
+ * ------------------------------------------------------------------------- */
+.ls-elev-1 {
+  box-shadow: var(--ls-elev-1);
+}
+
+.ls-elev-2 {
+  box-shadow: var(--ls-elev-2);
+}
+
+.ls-elev-3 {
+  box-shadow: var(--ls-elev-3);
+}
+
+.ls-elev-float {
+  box-shadow: var(--ls-elev-float);
+}
+
+/* An interactive raised surface: hover lifts it, press settles it. */
+.ls-lift {
+  transition:
+    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (hover: hover) {
+  .ls-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--ls-elev-3);
+  }
+}
+
+.ls-lift:active {
+  transform: translateY(0) scale(0.995);
+  box-shadow: var(--ls-elev-1);
+}
+
+/*
+ * Reduced motion: the surface still answers — the shadow steps up, so a card
+ * still reads as live under the pointer — but nothing moves. Declared after the
+ * rules it overrides, at the same specificity, so source order decides.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .ls-lift:hover,
+  .ls-lift:active {
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Focus — one visible ring, everywhere.
+ *
+ * Controls that draw their own background (nav rows, chips, icon buttons) get
+ * the same violet ring HeroUI gives its fields, so keyboard focus never
+ * disappears into a surface.
+ * ------------------------------------------------------------------------- */
+.ls-focus-ring:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--focus) 70%, transparent);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Focus UI — decorative chrome that borrows the atmosphere of the content
+ * being viewed.
+ *
+ * When the palette variables are published (by the image tint), controls like
+ * the active section chip quietly pick up the dominant hue of the photograph in
+ * front of them: a green product photo warms the chip green, an orange one,
+ * orange. It is a wash and a hairline — never text, never a colour block — so
+ * legibility, contrast and the platform's identity are untouched. With no
+ * image, the fallback is the brand violet and nothing is lost.
+ * ------------------------------------------------------------------------- */
+.ls-atmosphere-chip {
+  background-color: hsl(var(--image-hue, 296) var(--image-saturation, 45%) var(--image-lightness, 54%) / 0.13);
+  box-shadow:
+    inset 0 0 0 1px hsl(var(--image-hue, 296) var(--image-saturation, 45%) var(--image-lightness, 54%) / 0.24);
+  transition:
+    background-color 420ms ease,
+    box-shadow 420ms ease,
+    color 200ms ease;
+}
+
+/* ---------------------------------------------------------------------------
+ * Surface treatments.
+ *
+ * - `.ls-tone` — the secondary background layer: a very subtle tonal variation,
+ *   used behind sections and empty states. Almost invisible on purpose.
+ * - `.ls-depth` — the depth layer: one carefully positioned accent-trio wash at
+ *   low strength, for large light sections that need a breath of colour.
+ * The always-visible furniture (the header, the bottom navigation, the
+ * workspace menu) is solid base white — no glass anywhere in the platform.
+ * ------------------------------------------------------------------------- */
+.ls-tone {
+  background-image: linear-gradient(
+    160deg,
+    color-mix(in oklab, var(--ls-iris-soft) 30%, transparent) 0%,
+    transparent 55%,
+    color-mix(in oklab, var(--ls-milk) 16%, transparent) 100%
+  );
+}
+
+.ls-depth {
+  background-image: var(--ls-gradient-depth);
+}
+
+
+
+/* ---------------------------------------------------------------------------
+ * Gradient stops for SVG.
+ *
+ * SVG `stop-color` needs a real CSS declaration to resolve our custom
+ * properties reliably, so the accent trio's stops are exposed as tiny classes. The
+ * gradient logo (and any SVG that carries the brand treatment) sets these on its
+ * stops and is recoloured by the theme with no JavaScript and no second palette.
+ * ------------------------------------------------------------------------- */
+.ls-grad-iris {
+  stop-color: var(--ls-iris);
+}
+.ls-grad-iris-deep {
+  stop-color: var(--ls-iris-deep);
+}
+.ls-grad-soft {
+  stop-color: var(--ls-iris-soft);
+}
+.ls-grad-milk {
+  stop-color: var(--ls-milk);
+}
+
+/* ---------------------------------------------------------------------------
+ * One radius for media, everywhere.
+ *
+ * A photograph is a surface on this platform like any other, so it has the same
+ * rounded corner as the surface it sits in — and it is clipped **on the image's
+ * own container**, rather than relying on a parent's `overflow: hidden` to
+ * happen to do it. That distinction is the reported defect on the product view:
+ * where a photograph is a direct child of a rounded box, the corner is the box's
+ * guess rather than the media system's rule.
+ *
+ * Two sizes, so the system can express "inside a card" and "the hero of a page"
+ * without either becoming a one-off.
+ * ------------------------------------------------------------------------- */
+:root {
+  --media-radius: 1rem;
+  --media-radius-lg: min(1.5rem, var(--radius-3xl, 1.5rem));
+}
+
+.media-frame {
+  overflow: hidden;
+  border-radius: var(--media-radius);
+}
+
+.media-frame-lg {
+  overflow: hidden;
+  border-radius: var(--media-radius-lg);
+}
+
+/* ---------------------------------------------------------------------------
+ * The wordmark's accent.
+ *
+ * `STORE` carries the controlled accent: the touch of dark violet from the
+ * trio. One class, so the treatment is identical in the header, the footer and
+ * the auth card.
+ * ------------------------------------------------------------------------- */
+.ls-wordmark-accent {
+  color: var(--ls-iris-deep);
+}
+
+/* ---------------------------------------------------------------------------
+ * Registered colours and shadows.
+ *
+ * The `--ls-*` identity tokens are exposed to Tailwind as real utilities
+ * (`text-iris`, `bg-milk`, `shadow-elev-2`, …) so components can use the accent
+ * trio and the elevation scale with the same syntax as every other class —
+ * including variants like `hover:shadow-elev-3`. `inline` is required so each
+ * utility resolves the variable at the element, which is what keeps dark mode
+ * and the theme switch working per-surface.
+ * ------------------------------------------------------------------------- */
+@theme inline {
+  --color-iris: var(--ls-iris);
+  --color-iris-deep: var(--ls-iris-deep);
+  --color-iris-soft: var(--ls-iris-soft);
+  --color-milk: var(--ls-milk);
+  --color-snow: var(--ls-snow);
+  --color-ink: var(--ls-ink);
+
+  --shadow-elev-1: var(--ls-elev-1);
+  --shadow-elev-2: var(--ls-elev-2);
+  --shadow-elev-3: var(--ls-elev-3);
+  --shadow-elev-float: var(--ls-elev-float);
+}
+
+/* ---------------------------------------------------------------------------
+ * Buttons, variant by variant.
+ *
+ * **Primary** is neutral on purpose: an important action gets a deep,
+ * violet-tinted ink gradient and snow text — real weight without spending the
+ * platform's colour on a control. The colour is spent at the *edges* instead —
+ * the accent trio travelling around the button (`.ls-edge`). Press keeps
+ * HeroUI's scale-down and sends the colour around faster.
+ *
+ * **Secondary / tertiary** are raised white controls: the elevation system
+ * carries them, and hover simply raises the shadow. No borders.
+ *
+ * **Ghost** stays flat until touched.
+ * ------------------------------------------------------------------------- */
+.button--primary {
+  --button-bg: var(--ls-ink);
+  --button-bg-hover: var(--ls-ink-soft);
+  --button-bg-pressed: var(--ls-ink);
+  --button-fg: var(--ls-snow);
+  background-color: var(--ls-ink);
+  background-image: var(--ls-gradient-ink);
+  box-shadow: var(--ls-elev-1);
+  transition:
+    transform 250ms var(--ease-smooth),
+    background-image 150ms var(--ease-out),
+    box-shadow 150ms var(--ease-out);
+}
+
+.button--primary:hover,
+.button--primary[data-hovered="true"] {
+  background-image: var(--ls-gradient-ink-hover);
+  box-shadow: var(--ls-elev-2);
+}
+
+.button--primary:active,
+.button--primary[data-pressed="true"] {
+  background-image: var(--ls-gradient-ink-hover);
+  box-shadow: var(--ls-elev-1);
+}
+
+.button--secondary,
+.button--tertiary {
+  box-shadow: var(--ls-elev-1);
+  transition:
+    transform 250ms var(--ease-smooth),
+    background-color 100ms var(--ease-out),
+    box-shadow 150ms var(--ease-out);
+}
+
+.button--secondary:hover,
+.button--secondary[data-hovered="true"],
+.button--tertiary:hover,
+.button--tertiary[data-hovered="true"] {
+  box-shadow: var(--ls-elev-2);
+}
+
+/* ---------------------------------------------------------------------------
+ * Inputs — a raised white surface, not a ruled box.
+ *
+ * The boundary of a field is its soft shadow and tonal fill; a hairline border
+ * only appears at focus, together with the violet ring. Hover raises the field
+ * a step so an interactive surface is felt before it is clicked.
+ * ------------------------------------------------------------------------- */
+.ls-input {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 0.85rem;
+  background-color: var(--field-background);
+  color: var(--field-foreground);
+  box-shadow: var(--ls-elev-1);
+  transition:
+    box-shadow 150ms var(--ease-out),
+    border-color 150ms var(--ease-out);
+}
+
+.ls-input::placeholder {
+  color: var(--field-placeholder);
+}
+
+.ls-input:hover {
+  box-shadow: var(--ls-elev-2);
+}
+
+.ls-input:focus,
+.ls-input:focus-visible {
+  outline: none;
+  border-color: color-mix(in oklab, var(--focus) 55%, transparent);
+  box-shadow:
+    var(--ls-elev-1),
+    0 0 0 3px color-mix(in oklab, var(--focus) 22%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
+ * The moving edge — colour in motion around a surface's perimeter.
+ *
+ * There is no line work in this platform: the accent trio travels around the
+ * *edges* instead. One conic gradient turning through a full loop — light
+ * violet, a touch of dark violet and amber milk visibly moving around the
+ * border of a surface, never drawn across it.
+ *
+ * - `.ls-edge` — an active or important control: the edge always moves, and a
+ *   tap sends the colour around faster.
+ * - `.ls-edge-card` — a card: the edge drifts quietly and answers the pointer.
+ *
+ * The edge is one masked pseudo-element (1.5px, `border-radius: inherit`), so
+ * it can never affect layout. Under reduced motion the gradient edge stays but
+ * stops travelling.
+ * ------------------------------------------------------------------------- */
+@property --ls-edge-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.ls-edge,
+.ls-edge-card {
+  position: relative;
+}
+
+.ls-edge::after,
+.ls-edge-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--ls-edge-angle),
+    var(--ls-iris) 0%,
+    var(--ls-iris-deep) 32%,
+    var(--ls-milk) 62%,
+    var(--ls-iris) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: ls-edge-run 5s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes ls-edge-run {
+  to {
+    --ls-edge-angle: 360deg;
+  }
+}
+
+/* A tap makes the colour run. */
+.ls-edge:active::after {
+  animation-duration: 1.2s;
+}
+
+/* Cards: a quiet drift that answers the pointer. */
+.ls-edge-card::after {
+  animation-duration: 9s;
+  opacity: 0.5;
+  transition: opacity 200ms var(--ease-out);
+}
+
+.ls-edge-card:hover::after {
+  opacity: 1;
+  animation-duration: 4s;
+}
+
+/* ---------------------------------------------------------------------------
+ * Orbs — the three-orb motif, breathing.
+ *
+ * The orbs drift slowly and the whole cluster breathes through a slow hue
+ * rotation, so the colour feels alive as you move through the platform. Motion
+ * without noise: transform and filter only, on decorative SVGs.
+ * ------------------------------------------------------------------------- */
+.ls-orbs {
+  animation: ls-orb-hue 36s ease-in-out infinite;
+}
+
+@keyframes ls-orb-hue {
+  0%,
+  100% {
+    filter: hue-rotate(0deg) saturate(1);
+  }
+  50% {
+    filter: hue-rotate(14deg) saturate(1.08);
+  }
+}
+
+.ls-orb-float {
+  animation: ls-orb-float 8s ease-in-out infinite alternate;
+}
+
+@keyframes ls-orb-float {
+  to {
+    transform: translate3d(0, -10px, 0);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Cards dealt onto the table.
+ *
+ * A grid marked `ls-deal-grid` sends its cards up from below the fold, one
+ * after another, whenever the list renders: search results, a filter applied, a
+ * page landing, a card just created taking its place. It reads as the content
+ * rearranging itself rather than a page being reloaded — CSS only, so it runs
+ * on the server-rendered DOM with no script and no layout shift.
+ * ------------------------------------------------------------------------- */
+/*
+ * `backwards`, never `both`: a filled-forward entrance animation keeps
+ * overriding `transform` for the rest of the element's life — even once it has
+ * finished — which silently disabled `.ls-lift`'s hover lift on every card in
+ * these grids. Filling only *backwards* holds the card hidden through its
+ * stagger delay and then hands the element back to its own styles, whose
+ * resting transform is exactly the keyframe's end state, so the hand-off is
+ * invisible.
+ */
+.ls-deal-grid > * {
+  animation: ls-deal-in 0.55s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.ls-deal-grid > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+.ls-deal-grid > *:nth-child(2) {
+  animation-delay: 45ms;
+}
+.ls-deal-grid > *:nth-child(3) {
+  animation-delay: 90ms;
+}
+.ls-deal-grid > *:nth-child(4) {
+  animation-delay: 135ms;
+}
+.ls-deal-grid > *:nth-child(5) {
+  animation-delay: 180ms;
+}
+.ls-deal-grid > *:nth-child(6) {
+  animation-delay: 225ms;
+}
+.ls-deal-grid > *:nth-child(7) {
+  animation-delay: 270ms;
+}
+.ls-deal-grid > *:nth-child(8) {
+  animation-delay: 320ms;
+}
+.ls-deal-grid > *:nth-child(9) {
+  animation-delay: 370ms;
+}
+.ls-deal-grid > *:nth-child(10) {
+  animation-delay: 420ms;
+}
+.ls-deal-grid > *:nth-child(11) {
+  animation-delay: 470ms;
+}
+.ls-deal-grid > *:nth-child(n + 12) {
+  animation-delay: 520ms;
+}
+
+@keyframes ls-deal-in {
+  from {
+    opacity: 0;
+    transform: translateY(2.75rem) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Kinetic type, identity loading and living skeletons.
+ *
+ * The hero's rotating word slot, the three-orb loader that stands in for every
+ * spinner, the shimmer that keeps skeleton rows alive, and the soft glow that
+ * marks an active icon — colour and motion, no lines.
+ * ------------------------------------------------------------------------- */
+
+/* The word slot: words drift upward one row at a time; the last row is a clone
+   of the first, so the loop closes without a jump. */
+.ls-word-rotate-track {
+  animation: ls-words 10s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+@keyframes ls-words {
+  0%,
+  14% {
+    transform: translateY(0);
+  }
+  18%,
+  32% {
+    transform: translateY(-16.666%);
+  }
+  36%,
+  50% {
+    transform: translateY(-33.333%);
+  }
+  54%,
+  68% {
+    transform: translateY(-50%);
+  }
+  72%,
+  86% {
+    transform: translateY(-66.666%);
+  }
+  90%,
+  100% {
+    transform: translateY(-83.333%);
+  }
+}
+
+/* A digit landing in its cell — the little pop of arrival. */
+@keyframes ls-otp-land {
+  from {
+    transform: translateY(-3px) scale(0.94);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* The three-orb loader: the identity, breathing. */
+.ls-orb-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ls-orb-pop 1.15s ease-in-out infinite;
+}
+
+.ls-orb-dot-2 {
+  animation-delay: 0.16s;
+}
+
+.ls-orb-dot-3 {
+  animation-delay: 0.32s;
+}
+
+@keyframes ls-orb-pop {
+  0%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0.45;
+  }
+  45% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Living skeletons: a breath of the trio sweeping across the row. */
+.ls-shimmer {
+  background-image: linear-gradient(
+    100deg,
+    transparent 20%,
+    color-mix(in oklab, var(--ls-iris) 16%, transparent) 50%,
+    color-mix(in oklab, var(--ls-milk) 10%, transparent) 62%,
+    transparent 82%
+  );
+  background-size: 220% 100%;
+  animation: ls-shimmer 1.7s ease-in-out infinite;
+}
+
+@keyframes ls-shimmer {
+  from {
+    background-position: 220% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+/* An active icon: the colour itself changes and carries a soft glow — no
+   border, no frame around the control. */
+.ls-active-glow {
+  color: var(--ls-iris-deep);
+  filter: drop-shadow(0 0 7px color-mix(in oklab, var(--ls-iris) 60%, transparent));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ls-edge::after,
+  .ls-edge-card::after,
+  .ls-orbs,
+  .ls-orb-float,
+  .ls-word-rotate-track,
+  .ls-orb-dot,
+  .ls-shimmer {
+    animation: none;
+  }
+
+  @keyframes ls-otp-land {
+    from {
+      transform: none;
+      opacity: 1;
+    }
+  }
+
+  .ls-deal-grid > * {
+    animation: none;
+  }
+}
+
+/* ===========================================================================
+ * THE CARD SURFACE — the plain raised plane every contextual card is cut from.
+ *
+ * A card is a single self-contained surface: solid, with a generous radius, a
+ * soft violet-tilted shadow, and ordinary HTML inside it. There is no container
+ * behind the content, no seam and no drawn line — the meaning is carried by
+ * typography, spacing and elevation, the same three tools the rest of the
+ * platform is built on. This is the *primitive*: the purpose-built
+ * compositions that give each kind of information its own form live in
+ * `components/cards/` and are cut from this same surface.
+ *
+ * The surface matches HeroUI's own `Card` exactly (`--surface` fill, the
+ * platform's card radius, the `--surface-shadow` step), so a card drawn here
+ * and a card drawn by HeroUI are the same object at a glance. Cards that are
+ * doorways to something add `.ls-lift`, which raises them one step on hover and
+ * settles them on press.
+ *
+ *     <article class="ls-card ls-lift">
+ *       <a class="ls-card__media ls-card__cover aspect-4/3"><img …/></a>
+ *       <div class="ls-card__body">…</div>
+ *     </article>
+ *
+ * Nothing here is glass: the fill is opaque `--surface`, in light and in dark.
+ * ======================================================================== */
+
+@layer components {
+.ls-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* The platform's card radius — the same value HeroUI's `Card` uses. */
+  border-radius: min(32px, var(--radius-3xl, 1.5rem));
+  background-color: var(--surface);
+  box-shadow: var(--ls-elev-2);
+}
+
+/*
+ * The media half of a card.
+ *
+ * A fixed proportion on the container (so every card in a row lines its image
+ * up) and a cover crop on the image inside it. The card's own `overflow: hidden`
+ * clips the top corners, so the photograph wears the card's radius rather than
+ * guessing at one.
+ */
+.ls-card__media {
+  position: relative;
+  display: block;
+  /* `flex: none` keeps the image at its own proportion: a flex column would
+     otherwise shrink a fixed-aspect child when the body grew. */
+  flex: none;
+  width: 100%;
+  overflow: hidden;
+  background-color: var(--surface-secondary);
+}
+
+.ls-card__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/*
+ * The card answers the pointer once, at the image: a cover photograph eases in
+ * a hair when the card is hovered, and a small media tile answers on its own.
+ * Subtle enough that it reads as depth, not as an animation.
+ */
+@media (hover: hover) {
+  .ls-card:hover .ls-card__cover img,
+  .ls-card__media:hover img {
+    transform: scale(1.04);
+  }
+}
+
+/*
+ * The text half: one predictable stack, with the action pinned to the foot — so
+ * every card in a row reads its price and its button on the same line, however
+ * long the title above them is.
+ */
+.ls-card__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ls-card__media img {
+    transition: none;
+  }
+}
+}
+
+/* ---- A card that moves between states ------------------------------------ */
+
+/*
+ * A form becoming a success is not a page refresh — the card participates. The
+ * outgoing state settles away and the incoming one rises into its place, with
+ * one motion curve everywhere, so a reset, a purchase and a saved profile all
+ * feel like the same platform thinking.
+ */
+@keyframes ls-stage-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ls-stage-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.98);
+  }
+}
+
+.ls-stage--in {
+  animation: ls-stage-in 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.ls-stage--out {
+  animation: ls-stage-out 0.22s cubic-bezier(0.55, 0, 0.85, 0.4) both;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ls-stage--in,
+  .ls-stage--out {
+    animation-duration: 1ms;
+  }
+}
+
+/* ===========================================================================
+ * THE CONTEXTUAL CARDS — one form per kind of thing.
+ *
+ * A card is not a rectangle that content is poured into. Every kind of
+ * information on this platform gets a form derived from the thing it
+ * represents: a shop is a miniature storefront, a product is a message that
+ * presents it, a ticket is a ticket, an event is a poster, a purchase is a
+ * transaction, a confirmation is a confirmation. Each composition lives in
+ * `components/cards/`, purpose-built; what they share is only the language —
+ * the type scale, the accent trio, the elevation scale, the spacing rhythm and
+ * the motion curves above.
+ *
+ * What lives here is the geometry those compositions need and cannot carry in
+ * markup alone:
+ *
+ * - `.ls-bubble` — the product message: a bubble silhouette with a trailing
+ *   corner, so a product reads as something presented to the shopper rather
+ *   than a tile in a grid.
+ * - `.ls-ticket` / `.ls-ticket__perf` — the ticket: a stub separated by a real
+ *   perforation, with the notches bitten out of the edges where it tears.
+ * - `.ls-shelf` — the shop card's product shelf: a sideways-scrolling strip of
+ *   the shop's own goods, the display window of a miniature storefront.
+ * - `.ls-poster__scrim` — the event poster's caption scrim, so an event's own
+ *   photography can carry its title the way a poster does.
+ * - `.ls-confirm-*` — the confirmation that draws itself when a payment lands.
+ *
+ * Every shape below is derived from its object, not decorated: the differences
+ * between these cards are meaning, not variety. None of it is glass, blur or a
+ * heavy effect — all of it is ordinary background, radius, shadow and one
+ * cheap keyframe.
+ * ======================================================================== */
+
+/* ---- The product message bubble ----------------------------------------- */
+
+/*
+ * A product presented like a rich message: one large-cornered bubble with a
+ * single trailing corner stepped out at the bottom right. The asymmetry is the
+ * whole silhouette — it is what makes the card read as "sent" before a word is
+ * read. The tail is a clipped pseudo-element on the same surface, so it can
+ * never affect layout.
+ */
+.ls-bubble {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: 1.9rem 1.9rem 0.75rem 1.9rem;
+  background-color: var(--surface);
+  box-shadow: var(--ls-elev-2);
+}
+
+.ls-bubble::after {
+  content: "";
+  position: absolute;
+  right: 0.65rem;
+  bottom: -9px;
+  width: 20px;
+  height: 15px;
+  background-color: var(--surface);
+  clip-path: polygon(100% 0, 100% 100%, 0 0);
+  pointer-events: none;
+}
+
+/* The message arriving: rising a hair from its own tail, never flying in. */
+@keyframes ls-bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+}
+
+/* ---- The ticket ---------------------------------------------------------- */
+
+/*
+ * The ticket silhouette: a main body and a stub, one surface with generous
+ * corners. `overflow: visible` so the perforation's notches can sit half
+ * outside the edge — the half that overlaps the card bites a real notch out of
+ * it, and the half that sits outside is page-coloured and invisible.
+ */
+.ls-ticket {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: 1.65rem;
+  background-color: var(--surface);
+  box-shadow: var(--ls-elev-2);
+}
+
+/*
+ * The perforation — the line the ticket tears along. A dashed rule with a
+ * notch bitten out at each end: on a phone the ticket is stacked, so the
+ * perforation runs across and the notches bite the left and right edges; from
+ * `sm` up the stub sits beside the body, the perforation runs down, and the
+ * notches bite the top and bottom edges.
+ */
+.ls-ticket__perf {
+  position: relative;
+  align-self: stretch;
+  height: 0;
+  border-top: 2px dashed var(--separator);
+}
+
+.ls-ticket__perf::before,
+.ls-ticket__perf::after {
+  content: "";
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  background-color: var(--background);
+}
+
+.ls-ticket__perf::before {
+  top: -11px;
+  left: -11px;
+}
+
+.ls-ticket__perf::after {
+  top: -11px;
+  right: -11px;
+}
+
+@media (min-width: 640px) {
+  .ls-ticket {
+    flex-direction: row;
+  }
+
+  .ls-ticket__perf {
+    width: 0;
+    height: auto;
+    border-top: 0;
+    border-left: 2px dashed var(--separator);
+  }
+
+  .ls-ticket__perf::before {
+    top: -11px;
+  }
+
+  .ls-ticket__perf::after {
+    top: auto;
+    right: auto;
+    bottom: -11px;
+    left: -11px;
+  }
+}
+
+/* The ticket revealed — slid out of its sleeve, once, subtly. */
+@keyframes ls-ticket-in {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+}
+
+/* ---- The shop card's product shelf -------------------------------------- */
+
+/*
+ * The display window of the miniature storefront: the shop's own goods,
+ * sideways. The row scrolls inside the card, cards snap to a resting position,
+ * and the scrollbar is hidden like everywhere else — a partial tile at the
+ * edge says "there is more" better than an indicator ever could.
+ */
+.ls-shelf {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  /* A sideways swipe stays inside the shelf — it never turns into a page
+     scroll or a browser back-navigation. */
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  /* Breathing room so a hovered tile's lift is never clipped by the scroller. */
+  padding-block: 0.35rem;
+}
+
+.ls-shelf::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* ---- The event poster's caption scrim ----------------------------------- */
+
+/*
+ * A poster carries its title on the artwork. The scrim is a fixed dark wash
+ * (photographs do not change with the theme) so the caption stays legible on
+ * any image, and the caption itself wears `--ls-snow` — light on dark in both
+ * themes.
+ */
+.ls-poster__scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    transparent 32%,
+    oklch(0.17 0.02 292 / 0.55) 64%,
+    oklch(0.17 0.02 292 / 0.88) 100%
+  );
+}
+
+/* ---- The confirmation ---------------------------------------------------- */
+
+/*
+ * A success state is a small event, not a label: the ring pops open and the
+ * check draws itself once. Both are transform and stroke work on one tiny SVG
+ * — nothing reflows, nothing loops.
+ */
+.ls-confirm-ring {
+  animation: ls-confirm-ring 0.55s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+@keyframes ls-confirm-ring {
+  from {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+}
+
+.ls-confirm-check path {
+  stroke-dasharray: 34;
+  stroke-dashoffset: 34;
+  animation: ls-confirm-draw 0.45s 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes ls-confirm-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ls-confirm-ring {
+    animation: none;
+  }
+
+  .ls-confirm-check path {
+    stroke-dashoffset: 0;
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Chat motion.
+ *
+ * The conversation's own small movements: a message arriving — whether it was
+ * just sent or just received — settles up into place, and the composer's
+ * attachments and menus pop in below the same easing. Short, subtle, and only
+ * ever on the element that actually changed: the rest of the thread holds
+ * still. The rise is deliberately tiny (4px) against the thread's spacing, so
+ * an arriving bubble can never touch the one beside it — an animation may
+ * never change where anything sits. Both use `backwards` fill so nothing keeps
+ * overriding an element's own transform after it has arrived, and every use
+ * sits behind `motion-safe:`.
+ * ------------------------------------------------------------------------- */
+@theme {
+  --animate-chat-in: ls-chat-in 0.24s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  --animate-chat-pop: ls-chat-pop 0.22s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  --animate-preview-in: ls-preview-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* The photograph arriving to fill the screen: one quiet rise from the thread
+   it came from — a small scale and a fade, nothing more. */
+@keyframes ls-preview-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+@keyframes ls-chat-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ls-chat-pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * The chat application's viewport.
+ *
+ * The full-screen chat is anchored to the *visual* viewport, not the layout
+ * one: `ChatApplication` publishes the visible viewport's real height and top
+ * offset here, and the application fills exactly that. Before the script runs
+ * (and where there is no `visualViewport` at all) the fallbacks are the modern
+ * dynamic viewport units, which are correct on every browser that lacks the
+ * keyboard case — the one case the script exists to handle.
+ *
+ * This is what keeps the conversation header still when the keyboard opens:
+ * the application simply becomes shorter, the message viewport gives up the
+ * height, and the composer rises to meet the keyboard.
+ * ------------------------------------------------------------------------- */
+:root {
+  --chat-vv-height: 100dvh;
+  --chat-vv-top: 0px;
+}
+
+/* ---------------------------------------------------------------------------
+ * The composer against the keyboard — no gap.
+ *
+ * While the keyboard is open, the home-indicator inset beneath the composer is
+ * not safety, it is a gap: the keyboard is already the thing below. The
+ * composer's own padding keeps it off the keyboard's edge, and the inset
+ * returns the moment the keyboard goes away. Declared unlayered on purpose so
+ * it settles above the Tailwind utility it corrects.
+ * ------------------------------------------------------------------------- */
+.chat-application[data-keyboard="open"] [data-chat-composer] {
+  padding-bottom: 0.75rem;
+}

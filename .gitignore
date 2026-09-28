@@ -1,0 +1,39 @@
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Local libSQL database (development stand-in for Turso)
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Uploaded files in development (local storage driver)
+storage/
+
+# Environment
+.env
+.env.local
+.env*.local
+
+# Logs / OS
+*.log
+.DS_Store
+
+# Typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# Env secret dump (created on request) — never commit
+env.txt
+
+# Dev-only rendered-email outbox (email audit) — never commit
+.email-outbox/
+
+# Workspace-internal caches (browser profiles, tool caches)
+.cache/
+.config/
+.local/

@@ -1,0 +1,53 @@
+{
+  "name": "link-store",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LINK STORE — One link. Everything you sell.",
+  "scripts": {
+    "postinstall": "node scripts/patch-heroui-rsc.mjs",
+    "dev": "next dev -p 5000 -H 0.0.0.0",
+    "build": "next build",
+    "start": "next start -p 5000 -H 0.0.0.0",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "node scripts/migrate.mjs",
+    "db:seed": "node scripts/seed.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1137.0",
+    "@aws-sdk/s3-request-presigner": "^3.1137.0",
+    "@gravity-ui/icons": "2.22.0",
+    "@heroui/react": "3.2.6",
+    "@heroui/styles": "3.2.6",
+    "@internationalized/date": "3.12.4",
+    "@libsql/client": "^0.18.0",
+    "better-auth": "^1.7.5",
+    "freebuff": "^0.0.182",
+    "kysely": "^0.28.17",
+    "kysely-libsql": "^0.7.1",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^1.47.0",
+    "next": "15.5.25",
+    "next-themes": "^0.4.6",
+    "qrcode": "^1.5.4",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "server-only": "^0.0.1",
+    "tailwind-variants": "3.3.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/leaflet": "^1.9.22",
+    "@types/node": "^20.19.43",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.1.17",
+    "@types/react-dom": "^19.1.9",
+    "autoprefixer": "^10.4.21",
+    "eslint": "^9.39.0",
+    "eslint-config-next": "15.5.25",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3"
+  }
+}

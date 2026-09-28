@@ -330,8 +330,9 @@ export function SingleImageUploader({
   purpose?: "store" | "avatar";
   /**
    * How the preview frames the image. `contain` keeps the whole image at its
-   * own proportions — logos and marks, never stretched or cropped. `cover`
-   * fills the frame the way a cover region does on the storefront.
+   * own proportions inside the frame with room to breathe — logos and marks,
+   * never stretched, cropped or clipped. `cover` fills the frame the way a
+   * cover region does on the storefront.
    */
   fit?: "contain" | "cover";
   /** Size/shape of the preview frame. Covers read best in a wide frame. */
@@ -370,7 +371,7 @@ export function SingleImageUploader({
             alt=""
             src={value}
             className={`${previewClassName} rounded-xl ${
-              fit === "contain" ? "object-contain" : "object-cover"
+              fit === "contain" ? "object-contain p-2" : "object-cover"
             }`}
           />
         ) : (

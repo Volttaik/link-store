@@ -150,6 +150,7 @@ export function StoreOnboardingForm({
             fit="contain"
             folder="store"
             label="Upload logo"
+            previewClassName="h-24 w-24"
           />
           <input name="logoUrl" type="hidden" value={logoUrl ?? ""} />
         </div>

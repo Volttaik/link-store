@@ -97,52 +97,59 @@ export default async function StorefrontPage({
 
   return (
     <div>
-      {/* Store header */}
+      {/*
+        Store header: a split composition. The store's identity stands on one
+        side, the cover photo is the hero of the other, and the two meet along
+        a diagonal slash that is the shape of the header itself. The photo
+        carries no scrim, no fade and no decoration — the layout solves
+        legibility, so the seller's photograph is seen exactly as uploaded.
+      */}
       <PatternSurface
         id="storefront-header"
         className="ls-tone bg-surface ls-elev-2"
         patternClassName="text-accent/10"
-        tintSrc={store.banner_url ? null : tintSource}
+        tintSrc={tintSource}
         tintStrength={0.8}
       >
-        {/*
-          The shop's own cover, behind its identity: name, mark and details sit
-          on top of it, kept legible by a light scrim. The cover paints above
-          the ambient tint and pattern layers, so nothing decorative washes
-          over the seller's photograph, and the scrim is only what the overlaid
-          text needs — the image itself stays clearly visible.
-        */}
+        {/* The cover photo's region: a band across the top on small screens,
+            its own slanted-edged region on the right from `lg` up. The slash
+            is structural (`.store-slash`), never an overlay on the image. */}
         {store.banner_url ? (
-          <div aria-hidden="true" className="absolute inset-0 z-0 overflow-hidden">
+          <div
+            aria-hidden="true"
+            className="store-slash relative h-56 w-full overflow-hidden sm:h-72 lg:absolute lg:inset-y-0 lg:right-0 lg:h-auto lg:w-[46%]"
+          >
             <img
               alt=""
               className="h-full w-full object-cover"
               loading="lazy"
               src={store.banner_url}
             />
-            <div className="absolute inset-0 bg-surface/40 sm:bg-transparent sm:bg-gradient-to-r sm:from-surface/85 sm:via-surface/55 sm:to-surface/10" />
           </div>
-        ) : null}
-        {/* The shop's pop: the orb motif large in the corner while the shop's
-            own colour washes the surface — every storefront feels like itself.
-            When a cover is uploaded, the cover is the statement and the orbs
-            stand down so they never sit over the seller's photograph. */}
-        {store.banner_url ? null : (
+        ) : (
+          /* The shop's pop when no cover is uploaded: the orb motif large in
+             the corner while the shop's own colour washes the surface — every
+             storefront feels like itself. */
           <ThreeOrbs className="absolute -top-8 right-2 -z-10 h-56 w-56 opacity-70 sm:h-72 sm:w-72" />
         )}
-        <div className="relative z-10 mx-auto w-full max-w-7xl px-4 py-10 sm:px-6">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
-            {/* A logo is a mark, never a photograph: `object-contain` keeps its
-                original proportions — square stays square, wide stays wide —
-                and nothing is stretched or cropped. */}
-            <Avatar size="lg" className="h-20 w-20 shrink-0 text-xl">
+        <div
+          className={`relative z-10 mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:py-14 ${
+            store.banner_url ? "lg:pr-[50%]" : ""
+          }`}
+        >
+          <div className="flex flex-col items-start gap-5">
+            {/* The store's mark, on the profile-picture system: fitted
+                proportionally inside its plate with room to breathe — square
+                stays square, wide stays wide, and nothing is stretched,
+                cropped or clipped at the edges. */}
+            <Avatar size="lg" className="h-20 w-20 shrink-0 text-xl sm:h-24 sm:w-24">
               {store.logo_url ?? undefined ? (
-              <Avatar.Image alt="" className="object-contain" src={store.logo_url ?? undefined} />
+              <Avatar.Image alt="" className="object-contain p-2" src={store.logo_url ?? undefined} />
               ) : null}
               <Avatar.Fallback>{store.name.slice(0, 2).toUpperCase()}</Avatar.Fallback>
             </Avatar>
 
-            <div className="min-w-0 flex-1 space-y-3">
+            <div className="w-full min-w-0 space-y-3">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{store.name}</h1>
                 {!store.is_published ? (

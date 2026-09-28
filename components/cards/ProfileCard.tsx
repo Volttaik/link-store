@@ -41,8 +41,8 @@ export function ProfileCard({
   avatarUrl?: string | null;
   /**
    * How the avatar is framed. A person's photo fills the circle (`cover`); a
-   * shop's logo is a mark and keeps its own proportions (`contain`) — never
-   * stretched, never cropped.
+   * shop's logo is a mark on the profile-picture system and keeps its own
+   * proportions (`contain`) — never stretched, never cropped, never clipped.
    */
   avatarFit?: "contain" | "cover";
   /** One line of standing: what they are, where they are, since when. */
@@ -58,7 +58,7 @@ export function ProfileCard({
           {avatarUrl ? (
             <Avatar.Image
               alt={name}
-              className={avatarFit === "contain" ? "object-contain" : "object-cover"}
+              className={avatarFit === "contain" ? "object-contain p-2" : "object-cover"}
               src={avatarUrl}
             />
           ) : null}

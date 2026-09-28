@@ -251,7 +251,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
                   {event.storeLogoUrl ?? undefined ? (
                   <Avatar.Image
                     alt=""
-                    className="object-contain"
+                    className="object-contain p-2"
                     src={event.storeLogoUrl ?? undefined}
                   />
                   ) : null}

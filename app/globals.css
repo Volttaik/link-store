@@ -739,6 +739,25 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
+ * The storefront header's diagonal slash.
+ *
+ * The store's identity and its cover photo meet along one clean diagonal — the
+ * shape of the header itself, never a gradient or an overlay laid over the
+ * photograph. On small screens the two areas stack and the slash becomes the
+ * cover band's slanted bottom edge; from `lg` up the photo stands as its own
+ * region on the right and the slash is that region's slanted left edge.
+ * ------------------------------------------------------------------------- */
+.store-slash {
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 86%);
+}
+
+@media (min-width: 64rem) {
+  .store-slash {
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 12% 100%);
+  }
+}
+
+/* ---------------------------------------------------------------------------
  * The wordmark's accent.
  *
  * `STORE` carries the controlled accent: the touch of dark violet from the

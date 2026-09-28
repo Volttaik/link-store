@@ -263,7 +263,7 @@ export default async function ListingDetailPage({
                   {detail.storeLogoUrl ?? undefined ? (
                   <Avatar.Image
                     alt=""
-                    className="object-contain"
+                    className="object-contain p-2"
                     src={detail.storeLogoUrl ?? undefined}
                   />
                   ) : null}

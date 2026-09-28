@@ -86,7 +86,7 @@ export function ProductCard({
             {listing.storeLogoUrl ? (
               <Avatar.Image
                 alt={listing.storeName}
-                className="object-contain"
+                className="object-contain p-1"
                 src={listing.storeLogoUrl}
               />
             ) : null}

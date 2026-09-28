@@ -5,13 +5,24 @@ import { isGoogleEnabled } from "@/lib/auth/server";
 import { Providers } from "./providers";
 import "./globals.css";
 
+/**
+ * The site's canonical origin — every share card, icon and sitemap URL is
+ * resolved against it, so previews point at the real deployment and never at
+ * whatever host happened to render the page.
+ */
+const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:5000";
+
+const title = "LINK STORE · One link. Everything you sell.";
+const description =
+  "Link Store is a universal commerce platform. Sell products, food, services, events, tickets and digital files from one shareable storefront link.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(appUrl),
   title: {
-    default: "LINK STORE · One link. Everything you sell.",
+    default: title,
     template: "%s · LINK STORE",
   },
-  description:
-    "Link Store is a universal commerce platform. Sell products, food, services, events, tickets and digital files from one shareable storefront link.",
+  description,
   applicationName: "LINK STORE",
   keywords: [
     "online store",
@@ -22,13 +33,42 @@ export const metadata: Metadata = {
     "digital products",
     "event tickets",
   ],
+  // The LINK ICON, generated with the platform's own mark — the same glyph the
+  // email shell wears (`scripts/generate-brand-assets.mjs`). Next serves these
+  // file-convention icons at /icon.png, /apple-icon.png and /favicon.ico.
+  icons: {
+    icon: [{ url: "/icon.png", type: "image/png", sizes: "32x32" }],
+    apple: [{ url: "/apple-icon.png", type: "image/png", sizes: "180x180" }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "LINK STORE",
+    statusBarStyle: "default",
+  },
   openGraph: {
-    title: "LINK STORE · One link. Everything you sell.",
+    title,
     description:
       "Create a storefront link and sell products, food, services, events and digital products in one place.",
+    url: appUrl,
     siteName: "LINK STORE",
     type: "website",
+    locale: "en",
+    images: [
+      {
+        url: "/brand/link-share.png",
+        width: 800,
+        height: 800,
+        alt: "LINK STORE — the chain-link mark",
+      },
+    ],
   },
+  twitter: {
+    card: "summary",
+    title,
+    description,
+    images: ["/brand/link-share.png"],
+  },
+  robots: { index: true, follow: true },
 };
 
 export const viewport: Viewport = {

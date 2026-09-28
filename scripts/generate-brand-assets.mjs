@@ -1,14 +1,23 @@
 /**
- * Generates the LINK STORE brand mark used in transactional email.
+ * Generates the LINK STORE brand mark everywhere it appears.
  *
- * Email clients do not render SVG (Gmail strips it, Outlook has no support),
- * so the mark ships as a PNG referenced by absolute URL. This script draws it
- * from scratch — no image dependencies — and writes `public/brand/link-mark.png`.
+ * One glyph, one generator: the 128px PNG referenced by transactional email,
+ * the browser tab icon, the iOS home-screen icon, the legacy favicon and the
+ * social share image are all drawn from the same shapes — so the site icon can
+ * never drift from the email logo. No image dependencies: shapes are
+ * signed-distance fields (anti-aliased by 3×3 supersampling) and the PNG is
+ * assembled byte by byte over node's zlib.
  *
  * The mark is the platform's own idea: two interlocking rounded links at 45°,
  * the chain-link glyph the whole identity hangs from, on a violet badge from
- * the accent trio. Shapes are signed-distance fields (anti-aliased by 3×3
- * supersampling) and the PNG is assembled byte by byte over node's zlib.
+ * the accent trio.
+ *
+ * Outputs:
+ *   public/brand/link-mark.png    128×128 — the email logo
+ *   public/brand/link-share.png   800×800 — social/share previews
+ *   app/icon.png                   32×32  — the browser tab icon
+ *   app/apple-icon.png            180×180 — iOS home screen
+ *   app/favicon.ico                32×32  — legacy /favicon.ico (PNG inside)
  *
  * Run: `node scripts/generate-brand-assets.mjs`
  */
@@ -18,7 +27,6 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SIZE = 128;
 const SUP = 3; // supersampling factor for anti-aliasing
 
 /* ---- Colour: the accent trio, as hex ------------------------------------ */
@@ -68,24 +76,25 @@ const COS = Math.cos(RAD);
 const SIN = Math.sin(RAD);
 
 /**
- * Coverage of the glyph at (x, y) in badge-local units (0…SIZE).
+ * Coverage of the glyph at (x, y) in badge-local units (0…size).
  * Two long rounded links, rotated 45°, offset along their shared axis so they
- * interlock like a chain.
+ * interlock like a chain. Every proportion is relative to the canvas, so the
+ * mark is identical at 32px and at 800px.
  */
-function glyphCoverage(x, y) {
+function glyphCoverage(x, y, size) {
   // Centre the coordinate system on the badge.
-  const px = x - SIZE / 2;
-  const py = y - SIZE / 2;
+  const px = x - size / 2;
+  const py = y - size / 2;
 
   // Rotate into the links' frame.
   const rx = px * COS + py * SIN;
   const ry = -px * SIN + py * COS;
 
-  const halfW = SIZE * 0.235;
-  const halfH = SIZE * 0.105;
+  const halfW = size * 0.235;
+  const halfH = size * 0.105;
   const radius = halfH;
-  const thickness = SIZE * 0.062;
-  const offset = SIZE * 0.155;
+  const thickness = size * 0.062;
+  const offset = size * 0.155;
 
   const d1 = Math.abs(sdRoundRect(rx - offset, ry, halfW, halfH, radius)) - thickness / 2;
   const d2 = Math.abs(sdRoundRect(rx + offset, ry, halfW, halfH, radius)) - thickness / 2;
@@ -96,51 +105,59 @@ function glyphCoverage(x, y) {
 }
 
 /** The violet badge the glyph sits on: a rounded square with a diagonal wash. */
-function badgeCoverage(x, y) {
-  return Math.min(1, Math.max(0, 0.5 - sdRoundRect(x - SIZE / 2, y - SIZE / 2, SIZE / 2 - 1, SIZE / 2 - 1, SIZE * 0.22)));
+function badgeCoverage(x, y, size) {
+  return Math.min(
+    1,
+    Math.max(0, 0.5 - sdRoundRect(x - size / 2, y - size / 2, size / 2 - 1, size / 2 - 1, size * 0.22)),
+  );
 }
 
 /* ---- Render -------------------------------------------------------------- */
 
-const pixels = Buffer.alloc(SIZE * SIZE * 4);
+/** The mark as raw RGBA pixels at the requested size. */
+function renderMark(size) {
+  const pixels = Buffer.alloc(size * size * 4);
 
-for (let y = 0; y < SIZE; y++) {
-  for (let x = 0; x < SIZE; x++) {
-    let badge = 0;
-    let glyph = 0;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      let badge = 0;
+      let glyph = 0;
 
-    for (let sy = 0; sy < SUP; sy++) {
-      for (let sx = 0; sx < SUP; sx++) {
-        const px = x + (sx + 0.5) / SUP;
-        const py = y + (sy + 0.5) / SUP;
-        badge += badgeCoverage(px, py);
-        glyph += glyphCoverage(px, py);
+      for (let sy = 0; sy < SUP; sy++) {
+        for (let sx = 0; sx < SUP; sx++) {
+          const px = x + (sx + 0.5) / SUP;
+          const py = y + (sy + 0.5) / SUP;
+          badge += badgeCoverage(px, py, size);
+          glyph += glyphCoverage(px, py, size);
+        }
       }
+
+      badge /= SUP * SUP;
+      glyph /= SUP * SUP;
+
+      // The badge's wash: deep violet at the top-left, light violet at the
+      // bottom-right — the accent trio travelling across the mark, as it does
+      // along the platform's edges.
+      const t = Math.min(1, Math.max(0, (x + y) / (2 * size)));
+      const br = Math.round(DEEP[0] + (IRIS[0] - DEEP[0]) * t);
+      const bg = Math.round(DEEP[1] + (IRIS[1] - DEEP[1]) * t);
+      const bb = Math.round(DEEP[2] + (IRIS[2] - DEEP[2]) * t);
+
+      // Glyph in snow, composited over the badge; transparent outside it.
+      const a = badge;
+      const r = Math.round(br + (250 - br) * glyph);
+      const g = Math.round(bg + (250 - bg) * glyph);
+      const b = Math.round(bb + (250 - bb) * glyph);
+
+      const i = (y * size + x) * 4;
+      pixels[i] = r;
+      pixels[i + 1] = g;
+      pixels[i + 2] = b;
+      pixels[i + 3] = Math.round(a * 255);
     }
-
-    badge /= SUP * SUP;
-    glyph /= SUP * SUP;
-
-    // The badge's wash: deep violet at the top-left, light violet at the
-    // bottom-right — the accent trio travelling across the mark, as it does
-    // along the platform's edges.
-    const t = Math.min(1, Math.max(0, (x + y) / (2 * SIZE)));
-    const br = Math.round(DEEP[0] + (IRIS[0] - DEEP[0]) * t);
-    const bg = Math.round(DEEP[1] + (IRIS[1] - DEEP[1]) * t);
-    const bb = Math.round(DEEP[2] + (IRIS[2] - DEEP[2]) * t);
-
-    // Glyph in snow, composited over the badge; transparent outside it.
-    const a = badge;
-    const r = Math.round(br + (250 - br) * glyph);
-    const g = Math.round(bg + (250 - bg) * glyph);
-    const b = Math.round(bb + (250 - bb) * glyph);
-
-    const i = (y * SIZE + x) * 4;
-    pixels[i] = r;
-    pixels[i + 1] = g;
-    pixels[i + 2] = b;
-    pixels[i + 3] = Math.round(a * 255);
   }
+
+  return pixels;
 }
 
 /* ---- PNG assembly -------------------------------------------------------- */
@@ -170,30 +187,76 @@ function chunk(type, data) {
   return Buffer.concat([length, body, crc]);
 }
 
-const ihdr = Buffer.alloc(13);
-ihdr.writeUInt32BE(SIZE, 0);
-ihdr.writeUInt32BE(SIZE, 4);
-ihdr[8] = 8; // bit depth
-ihdr[9] = 6; // colour type: RGBA
-ihdr[10] = 0;
-ihdr[11] = 0;
-ihdr[12] = 0;
+/** A complete PNG file for the mark at the requested size. */
+function markPng(size) {
+  const pixels = renderMark(size);
 
-// Scanlines, each prefixed by its filter byte (0 = none).
-const raw = Buffer.alloc(SIZE * (SIZE * 4 + 1));
-for (let y = 0; y < SIZE; y++) {
-  raw[y * (SIZE * 4 + 1)] = 0;
-  pixels.copy(raw, y * (SIZE * 4 + 1) + 1, y * SIZE * 4, (y + 1) * SIZE * 4);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(size, 0);
+  ihdr.writeUInt32BE(size, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 6; // colour type: RGBA
+  ihdr[10] = 0;
+  ihdr[11] = 0;
+  ihdr[12] = 0;
+
+  // Scanlines, each prefixed by its filter byte (0 = none).
+  const raw = Buffer.alloc(size * (size * 4 + 1));
+  for (let y = 0; y < size; y++) {
+    raw[y * (size * 4 + 1)] = 0;
+    pixels.copy(raw, y * (size * 4 + 1) + 1, y * size * 4, (y + 1) * size * 4);
+  }
+
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", deflateSync(raw, { level: 9 })),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
 }
 
-const png = Buffer.concat([
-  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-  chunk("IHDR", ihdr),
-  chunk("IDAT", deflateSync(raw, { level: 9 })),
-  chunk("IEND", Buffer.alloc(0)),
-]);
+/* ---- ICO assembly -------------------------------------------------------- */
 
-const out = join(dirname(fileURLToPath(import.meta.url)), "..", "public", "brand", "link-mark.png");
-mkdirSync(dirname(out), { recursive: true });
-writeFileSync(out, png);
-console.log(`wrote ${out} (${png.length} bytes)`);
+/**
+ * A legacy .ico holding one PNG image — the format's modern, supported shape
+ * (Vista and later), written without any image dependency.
+ */
+function iconIco(png, size) {
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(0, 0); // reserved
+  header.writeUInt16LE(1, 2); // type: icon
+  header.writeUInt16LE(1, 4); // one image
+
+  const entry = Buffer.alloc(16);
+  entry[0] = size >= 256 ? 0 : size; // width (0 means 256)
+  entry[1] = size >= 256 ? 0 : size; // height
+  entry[2] = 0; // palette colours
+  entry[3] = 0; // reserved
+  entry.writeUInt16LE(1, 4); // colour planes
+  entry.writeUInt16LE(32, 6); // bits per pixel
+  entry.writeUInt32LE(png.length, 8); // image data length
+  entry.writeUInt32LE(22, 12); // image data offset (6 + 16)
+
+  return Buffer.concat([header, entry, png]);
+}
+
+/* ---- Write every asset --------------------------------------------------- */
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const written = [];
+
+function write(relativePath, data) {
+  const out = join(root, relativePath);
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, data);
+  written.push(`${relativePath} (${data.length} bytes)`);
+}
+
+const mark128 = markPng(128);
+write("public/brand/link-mark.png", mark128);
+write("public/brand/link-share.png", markPng(800));
+write("app/icon.png", markPng(32));
+write("app/apple-icon.png", markPng(180));
+write("app/favicon.ico", iconIco(markPng(32), 32));
+
+for (const line of written) console.log(`wrote ${line}`);

@@ -15,7 +15,7 @@
  */
 
 import { Description, FieldError, Input, InputGroup, Label, ListBox, Select, Switch, TextArea, TextField } from "@heroui/react";
-import type { ComponentProps, ReactNode } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
 
 import { Icon, type IconName } from "@/components/ui/Icon";
 
@@ -154,9 +154,22 @@ export function TextAreaField({
  * type and status selector in the platform open but never take a selection.
  *
  * So the translation happens here, once, and every call site keeps the simple
- * string-in / string-out API. Fixing it in one place is the whole point: there
- * is exactly one implementation of "choose a value from a list" for the
- * marketplace, the workspace and the admin to share.
+ * string-in / string-out API — in either of the two ways a form field is used:
+ *
+ * - **controlled**: the caller passes `value`/`onChange` and owns the state;
+ * - **plain form field**: the caller passes `defaultValue` and a `name`, and
+ *   this field owns the state from the first choice on — so the chosen option
+ *   shows in the trigger at once, survives edits to other fields, and is what
+ *   the hidden form value submits.
+ *
+ * An earlier version only wired the controlled pair: `defaultValue` call
+ * sites handed their initial value to nothing at all, the selection was
+ * pinned to empty, and every such selector sat on its placeholder forever —
+ * the choice never appeared, never persisted and never reached the backend.
+ *
+ * Fixing it in one place is the whole point: there is exactly one
+ * implementation of "choose a value from a list" for the marketplace, the
+ * workspace and the admin to share.
  */
 export function SelectField({
   label,
@@ -166,6 +179,7 @@ export function SelectField({
   options,
   className,
   value,
+  defaultValue,
   onChange,
   ...selectProps
 }: SelectBaseProps & {
@@ -174,17 +188,37 @@ export function SelectField({
   className?: string;
   /** The selected option's value. `null`/empty shows the placeholder. */
   value?: string | null;
+  /**
+   * The initial selection when the field owns its own state (no `value`).
+   * This is what an editing form loads an existing record's value into.
+   */
+  defaultValue?: string | null;
   /** Called with the chosen value, or `null` when the selection is cleared. */
   onChange?: (value: string | null) => void;
 } & Omit<
   ComponentProps<typeof Select>,
-  "children" | "className" | "placeholder" | "value" | "onChange" | "selectedKey" | "onSelectionChange"
+  | "children"
+  | "className"
+  | "placeholder"
+  | "value"
+  | "defaultValue"
+  | "onChange"
+  | "selectedKey"
+  | "onSelectionChange"
 >) {
   const invalid = Boolean(error) || Boolean(selectProps.isInvalid);
 
-  // `undefined` and `""` both mean "nothing chosen"; react-aria wants `null` for
-  // the placeholder, and any other value must match an item's `id` exactly.
-  const selectedKey = value === undefined || value === null || value === "" ? null : value;
+  // Controlled when `value` is given; otherwise the field keeps its own state,
+  // seeded from `defaultValue` — the plain form-field semantics every call
+  // site in an editing form expects.
+  const isControlled = value !== undefined;
+  const [ownValue, setOwnValue] = useState<string | null>(defaultValue ?? null);
+  const current = isControlled ? (value ?? null) : ownValue;
+
+  // `undefined`, `null` and `""` all mean "nothing chosen"; react-aria wants
+  // `null` for the placeholder, and any other value must match an item's `id`
+  // exactly — so the trigger shows that item's label (`textValue`) at once.
+  const selectedKey = current == null || current === "" ? null : current;
 
   return (
     <Select
@@ -193,7 +227,11 @@ export function SelectField({
       isInvalid={invalid}
       placeholder={placeholder}
       selectedKey={selectedKey}
-      onSelectionChange={(key) => onChange?.(key === null ? null : String(key))}
+      onSelectionChange={(key) => {
+        const next = key === null ? null : String(key);
+        if (!isControlled) setOwnValue(next);
+        onChange?.(next);
+      }}
     >
       {label ? <Label>{label}</Label> : null}
 

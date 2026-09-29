@@ -3,10 +3,9 @@ import { redirect } from "next/navigation";
 import { StoreOnboardingForm } from "@/components/workspace/StoreOnboardingForm";
 import { Card } from "@heroui/react/card";
 import { PageHeader } from "@/components/ui/atoms";
-import { isIconName } from "@/components/ui/Icon";
 import { PatternSurface } from "@/components/visual/BackgroundPattern";
 import { requireUser, getStoreForUser } from "@/lib/auth";
-import { listPlatformCategories } from "@/lib/server/stores";
+import { STORE_CATEGORIES } from "@/lib/catalog";
 
 export const metadata = { title: "Create your store" };
 
@@ -18,8 +17,6 @@ export default async function OnboardingPage() {
 
   // One storefront per seller account — if it exists, the workspace is ready.
   if (existing) redirect("/workspace");
-
-  const categories = await listPlatformCategories();
 
   return (
     <div className="space-y-6">
@@ -41,15 +38,14 @@ export default async function OnboardingPage() {
             </p>
           </Card.Header>
           <Card.Content>
+            {/* The store's own category vocabulary — the same values the
+                settings form loads, the shop filter matches and the storefront
+                reads, so a category chosen here is one the rest of the platform
+                recognises. */}
             <StoreOnboardingForm
               defaultEmail={user.email}
               defaultName={user.name}
-              categories={categories.map((category) => ({
-                value: category.slug,
-                label: category.name,
-                // Only pass an icon through when it is one we actually draw.
-                icon: isIconName(category.icon) ? category.icon : undefined,
-              }))}
+              categories={STORE_CATEGORIES}
             />
           </Card.Content>
         </Card>

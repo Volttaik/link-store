@@ -13,10 +13,10 @@
  * published photography gets no shelf rather than a row of empty boxes.
  */
 
-import { Avatar } from "@heroui/react/avatar";
 import { Chip } from "@heroui/react/chip";
 import { Link } from "@heroui/react/link";
 
+import { ChatAvatar } from "@/components/chat/ChatAvatar";
 import { Icon } from "@/components/ui/Icon";
 import { ButtonLink } from "@/components/ui/controls";
 import { RatingStars } from "@/components/ui/atoms";
@@ -53,17 +53,16 @@ export function ShopCard({
 
       <div className="flex flex-col gap-3 px-4 pt-0 pb-4">
         {/* Identity — the sign, the name and the window card. */}
-        <div className="-mt-8 flex items-end gap-3">
-          <Avatar className="size-16 shrink-0 rounded-2xl ring-4 ring-surface">
-            {/* The profile-picture system, fitted proportionally: the mark
-                keeps its own proportions and sits clear of the plate's edges. */}
-            {store.logoUrl ? (
-              <Avatar.Image alt={store.name} className="object-contain p-1.5" src={store.logoUrl} />
-            ) : null}
-            <Avatar.Fallback className="rounded-2xl text-base">
-              {store.name.slice(0, 2).toUpperCase()}
-            </Avatar.Fallback>
-          </Avatar>
+        <div className="-mt-6 flex items-end gap-3">
+          {/* The shop's picture, exactly as chat draws the picture of whoever
+              you are talking to: the same profile-picture component, size,
+              fit and treatment — so a shop looks the same wherever it appears. */}
+          <ChatAvatar
+            className="shrink-0"
+            name={store.name}
+            size={44}
+            src={store.logoUrl}
+          />
 
           <div className="min-w-0 flex-1 pb-0.5">
             <Link
@@ -123,14 +122,10 @@ export function ShopCard({
         </div>
       ) : null}
 
-      {/* The door: what the shop has, and the way in. */}
+      {/* The door: when the shop opened, and the way in. No inventory tallies —
+          the marketplace shows goods, not counts of goods. */}
       <div className="mt-auto flex flex-col gap-3 px-4 pt-4">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-muted">
-          <span className="flex items-center gap-1.5 tabular-nums">
-            <Icon name="products" size={12} className="shrink-0" />
-            {store.publishedListingCount}{" "}
-            {store.publishedListingCount === 1 ? "listing" : "listings"}
-          </span>
           <span className="flex items-center gap-1.5">
             <Icon name="clock" size={12} className="shrink-0" />
             Joined {formatRelative(store.createdAt)}

@@ -739,13 +739,25 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
- * The storefront header's diagonal slash.
+ * The storefront header's split — and the slash that divides it.
  *
- * The store's identity and its cover photo meet along one clean diagonal — the
- * shape of the header itself, never a gradient or an overlay laid over the
- * photograph. On small screens the two areas stack and the slash becomes the
- * cover band's slanted bottom edge; from `lg` up the photo stands as its own
- * region on the right and the slash is that region's slanted left edge.
+ * The header is one composition in two clear regions: the store's identity on
+ * the left, its cover photo on the right. The slash is the structure between
+ * them — not a decorative line but the boundary itself, running the full height
+ * of the header from `lg` up (and the cover band's slanted bottom edge where
+ * the two regions stack on small screens).
+ *
+ * Three layers make it, all clipped by the same polygon and only nudged past
+ * the boundary, so the slash is one clean diagonal at every pixel:
+ *
+ * 1. `.store-slash` — the cover region's own slanted edge;
+ * 2. `.store-slash-depth` — the soft band of shadow the slash leaves beside
+ *    the photograph, so the identity side reads as standing in front;
+ * 3. `.store-slash-seam` — the accent trio as one hairline riding the slash.
+ *
+ * The depth and the seam are nudged *away* from the cover's filled side, so
+ * they paint beside the photograph and never over it: the seller's image stays
+ * exactly as uploaded — fitted, unblurred, unfaded.
  * ------------------------------------------------------------------------- */
 .store-slash {
   clip-path: polygon(0 0, 100% 0, 100% 100%, 0 86%);
@@ -753,7 +765,31 @@ body {
 
 @media (min-width: 64rem) {
   .store-slash {
-    clip-path: polygon(0 0, 100% 0, 100% 100%, 12% 100%);
+    clip-path: polygon(8% 0, 100% 0, 100% 100%, 24% 100%);
+  }
+}
+
+.store-slash-seam {
+  background-image: linear-gradient(
+    to right,
+    color-mix(in oklab, var(--ls-iris-deep) 55%, transparent),
+    color-mix(in oklab, var(--ls-iris) 45%, transparent)
+  );
+  transform: translateY(4px);
+}
+
+.store-slash-depth {
+  background-color: color-mix(in oklab, var(--ls-ink) 10%, transparent);
+  transform: translateY(14px);
+}
+
+@media (min-width: 64rem) {
+  .store-slash-seam {
+    transform: translateX(-4px);
+  }
+
+  .store-slash-depth {
+    transform: translateX(-16px);
   }
 }
 

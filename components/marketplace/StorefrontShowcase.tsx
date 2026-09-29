@@ -312,9 +312,6 @@ export function StorefrontShowcase({
                 type="button"
               >
                 {segment.label}
-                <span className={`ml-1.5 tabular-nums ${isActive ? "opacity-70" : "opacity-60"}`}>
-                  {formatNumber(segment.count)}
-                </span>
               </button>
             );
           })}
@@ -342,7 +339,6 @@ export function StorefrontShowcase({
                   type="button"
                 >
                   {category.name === ALL_CATEGORIES ? "All" : category.name}
-                  <span className="ml-1 opacity-60 tabular-nums">{formatNumber(category.count)}</span>
                 </button>
               );
             })}
@@ -365,10 +361,11 @@ export function StorefrontShowcase({
         <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-xl font-semibold tracking-tight">{active.label}</h2>
+            {/* What the section is — never a tally of how much is in it. */}
             <p className="mt-1 text-sm text-muted">
               {activeCategory !== ALL_CATEGORIES
-                ? `${formatNumber(visible.length)} of ${formatNumber(active.count)} in ${activeCategory}`
-                : `${formatNumber(active.count)} ${active.count === 1 ? "item" : "items"} from ${storeName}`}
+                ? `Filtered to ${activeCategory}`
+                : `From ${storeName}`}
             </p>
           </div>
         </div>

@@ -30,6 +30,10 @@ export function AuthLanding({
   function finish() {
     // `replace`, so Back never returns to a form that has already been spent.
     router.replace(next && next.startsWith("/") ? next : "/auth/continue");
+    // The just-established identity has to reach every server-rendered surface
+    // immediately — the header, the menus, the account-specific data — without
+    // anyone reloading the page.
+    router.refresh();
   }
 
   return (

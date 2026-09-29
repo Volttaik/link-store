@@ -87,6 +87,7 @@ export function WorkspaceShell({
   const mobileNav = useOverlayState();
   const [copied, setCopied] = useState(false);
   const [publishPending, startPublish] = useTransition();
+  const [, startSignOut] = useTransition();
   const [publishNotice, setPublishNotice] = useState<{ failed: boolean; text: string } | null>(null);
 
   const navContext: NavContext = useMemo(() => ({ storeSlug: store?.slug ?? null }), [store?.slug]);
@@ -407,6 +408,29 @@ export function WorkspaceShell({
     );
   }
 
+  /*
+   * Sign out, in place. The action ends the session, drops the browser-side
+   * shopping identity and revalidates every layout, so the workspace and the
+   * account surfaces it carries are gone from the screen immediately — no
+   * manual refresh, and nothing of this account left for the next one.
+   */
+  const signOut = () => {
+    startSignOut(async () => {
+      const { signOutAction } = await import("@/app/actions/auth");
+      try {
+        await signOutAction();
+        // In place: the revalidated layouts render the signed-out experience
+        // and the router lands on the marketplace home — no browser reload.
+        router.push("/");
+        router.refresh();
+      } catch {
+        // If the action truly failed, the sign-out route still ends the
+        // session — and reloads only in that fallback.
+        window.location.assign("/logout");
+      }
+    });
+  };
+
   const accountMenu = (
     <Dropdown>
       <Button isIconOnly variant="ghost" size="sm" aria-label={`Account: ${user.name}`}>
@@ -416,7 +440,16 @@ export function WorkspaceShell({
         </Avatar>
       </Button>
       <Dropdown.Popover>
-        <Dropdown.Menu onAction={(key) => router.push(String(key))}>
+        <Dropdown.Menu
+          onAction={(key) => {
+            const target = String(key);
+            if (target === "/logout") {
+              signOut();
+              return;
+            }
+            router.push(target);
+          }}
+        >
           <Dropdown.Item id="identity" textValue={user.name} isDisabled>
             <div className="flex flex-col">
               <Label>{user.name}</Label>

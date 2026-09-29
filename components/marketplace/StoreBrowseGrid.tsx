@@ -69,11 +69,7 @@ export async function StoreBrowseGrid({
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-8 sm:px-6">
       <PageHeader
         title={search ? `Shops matching “${search}”` : "Shops on Link Store"}
-        description={
-          total > 0
-            ? `${total} open ${total === 1 ? "shop" : "shops"} with published listings`
-            : "No shops are open yet"
-        }
+        description="Open shops with published listings."
         actions={
           <ButtonLink href="/sign-up" size="sm" variant="primary">
             Open your shop

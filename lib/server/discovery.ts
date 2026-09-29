@@ -17,8 +17,8 @@ import {
   shopDesignTypeFor,
   type ShopDesignType,
 } from "../catalog";
-import { countListings, listListings, type ListingQuery } from "./listings";
-import { countEvents, listEvents } from "./events";
+import { listListings, type ListingQuery } from "./listings";
+import { listEvents } from "./events";
 import { getStoreSettings } from "./stores";
 import type { CategoryRow, EventCardData, ListingCardData, StoreRow } from "../types";
 
@@ -278,26 +278,7 @@ export type MarketplaceHome = {
   /** Shops that have something published, with a gallery of their listings. */
   stores: StoreCard[];
   events: EventCardData[];
-  counts: { listings: number; stores: number; events: number };
 };
-
-/**
- * The platform's live totals.
- *
- * Split out from `getMarketplaceHome` so the home page hero can show real
- * numbers while the feed itself is still streaming behind its own boundary.
- */
-export async function getMarketplaceCounts(): Promise<MarketplaceHome["counts"]> {
-  const publicFilter: ListingQuery = { status: "active", onlyPublishedStores: true };
-
-  const [listings, stores, events] = await Promise.all([
-    countListings(publicFilter),
-    countStores({ onlyWithListings: true }),
-    countEvents({ status: "published", upcomingOnly: true, onlyPublishedStores: true }),
-  ]);
-
-  return { listings, stores, events };
-}
 
 /**
  * The unfiltered homepage: one product feed, one shop feed, upcoming events.
@@ -309,7 +290,7 @@ export async function getMarketplaceCounts(): Promise<MarketplaceHome["counts"]>
 export async function getMarketplaceHome(): Promise<MarketplaceHome> {
   const publicFilter: ListingQuery = { status: "active", onlyPublishedStores: true };
 
-  const [featured, newest, events, stores, counts] = await Promise.all([
+  const [featured, newest, events, stores] = await Promise.all([
     listListings({ ...publicFilter, sort: "newest", limit: 6, featuredOnly: true }),
     listListings({ ...publicFilter, sort: "newest", limit: 12 }),
     listEvents({
@@ -319,13 +300,12 @@ export async function getMarketplaceHome(): Promise<MarketplaceHome> {
       limit: 4,
     }),
     listStores({ onlyWithListings: true, sort: "listings", limit: 8, withGallery: true }),
-    getMarketplaceCounts(),
   ]);
 
   const seen = new Set(featured.map((listing) => listing.id));
   const listings = [...featured, ...newest.filter((listing) => !seen.has(listing.id))].slice(0, 16);
 
-  return { listings, stores, events, counts };
+  return { listings, stores, events };
 }
 
 /**

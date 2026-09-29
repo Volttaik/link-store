@@ -82,9 +82,7 @@ export async function EventBrowseGrid({
         title={search ? `Events matching “${search}”` : showPast ? "All events" : "Upcoming events"}
         description={
           description ??
-          (total > 0
-            ? `${total} ${total === 1 ? "event" : "events"} with tickets on sale`
-            : "No events are on sale right now")
+          (showPast ? "Every event hosted on Link Store." : "Events with tickets on sale.")
         }
         actions={
           <ButtonLink

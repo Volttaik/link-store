@@ -19,10 +19,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { buildCategoryTree, flattenCategoryTree, type CategoryNode } from "@/lib/categories";
 import { categoryIconName } from "@/lib/catalog";
 import { ContextNotice } from "@/components/visual/Rearrange";
-import { formatNumber } from "@/lib/format";
 import {
   getCategoryMarketplace,
-  getMarketplaceCounts,
   getMarketplaceHome,
 } from "@/lib/server/discovery";
 import { listPlatformCategories } from "@/lib/server/stores";
@@ -170,9 +168,6 @@ export default async function MarketplaceHomePage({
             </SearchField>
           </SearchForm>
 
-          <Suspense fallback={<div className="mt-6 h-4 w-64 max-w-full rounded-md bg-surface-secondary/70" />}>
-            <MarketplaceTotals />
-          </Suspense>
         </div>
       </section>
 
@@ -259,22 +254,6 @@ export default async function MarketplaceHomePage({
         </section>
       </div>
     </div>
-  );
-}
-
-/** Live platform totals — real counts, or nothing at all. */
-async function MarketplaceTotals() {
-  const counts = await getMarketplaceCounts();
-
-  if (counts.listings === 0 && counts.stores === 0 && counts.events === 0) return null;
-
-  return (
-    <p className="mt-6 text-xs tabular-nums text-muted">
-      {formatNumber(counts.listings)} live{" "}
-      {counts.listings === 1 ? "listing" : "listings"} · {formatNumber(counts.stores)}{" "}
-      {counts.stores === 1 ? "store" : "stores"} · {formatNumber(counts.events)} upcoming{" "}
-      {counts.events === 1 ? "event" : "events"}
-    </p>
   );
 }
 

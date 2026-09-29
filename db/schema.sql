@@ -97,6 +97,29 @@ CREATE TABLE IF NOT EXISTS verification (
 );
 CREATE INDEX IF NOT EXISTS verification_identifier_idx ON verification(identifier);
 
+-- Registrations waiting to be proven.
+--
+-- An account does not exist until its email has been verified, so the details
+-- of a registration in flight live HERE and nowhere else: nothing in `users`,
+-- `account` or `sessions` is written before the emailed code is checked on the
+-- server (see lib/auth/registration.ts). The password is held sealed (AES-GCM,
+-- under a key derived from the server's session secret), the code itself is
+-- never stored — only a keyed hash of it — and the row is consumed the moment
+-- the account is created, or forgotten when it expires unproven.
+CREATE TABLE IF NOT EXISTS pending_registrations (
+  id                 TEXT PRIMARY KEY,
+  email              TEXT NOT NULL UNIQUE,
+  username           TEXT NOT NULL,
+  name               TEXT NOT NULL,
+  password_encrypted TEXT NOT NULL,
+  otp_hash           TEXT NOT NULL,
+  attempts           INTEGER NOT NULL DEFAULT 0,
+  expires_at         TEXT NOT NULL,
+  consumed_at        TEXT,
+  created_at         TEXT NOT NULL,
+  updated_at         TEXT NOT NULL
+);
+
 -- ---------------------------------------------------------------------------
 -- Store (the seller workspace + public storefront, reachable at /@slug)
 -- ---------------------------------------------------------------------------

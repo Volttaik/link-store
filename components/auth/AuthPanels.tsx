@@ -15,6 +15,7 @@ import { Button } from "@heroui/react";
 import { OrbLoader } from "@/components/visual/OrbLoader";
 import { useState } from "react";
 
+import { startRegistrationAction } from "@/app/actions/auth";
 import { AuthDivider } from "@/components/auth/AuthDivider";
 import { AuthNotice } from "@/components/auth/AuthNotice";
 import { GoogleAuthButton } from "@/components/auth/GoogleAuthButton";
@@ -90,9 +91,13 @@ export function SignInPanel({
     // which is what confirms it.
     if (unverified) {
       setNotice("That account is not confirmed yet. Sending you a code…");
+      // The code that follows is entered on the sign-in code screen, so it must
+      // be a sign-in code: proving the address with it is what confirms the
+      // account (the engine strips anything that predates the proof). One code
+      // type, one screen — never a code that the next step cannot read.
       const { error: sendError } = await authClient.emailOtp.sendVerificationOtp({
         email: address,
-        type: "email-verification",
+        type: "sign-in",
       });
       if (sendError) {
         setNotice(null);
@@ -249,51 +254,38 @@ export function SignUpPanel({
 
     setPending(true);
 
-    const { error: signUpError } = await authClient.signUp.email({
+    /*
+     * No account is created here — that is the whole point of this step. The
+     * details are held as a pending registration and a code is sent; the
+     * account itself is created on the server only once that code has been
+     * verified. Until then there is no profile, no workspace and nothing to
+     * sign in to.
+     */
+    const result = await startRegistrationAction({
       email: address,
-      password,
       username: handle,
       // The username is the account's name: it is what the workspace greets and
       // what a storefront shows.
       name: handle,
-    });
-
-    if (signUpError) {
-      setPending(false);
-      const { message } = classify(signUpError);
-
-      if (message.includes("username")) {
-        setFieldErrors({ username: "That username is taken. Try another." });
-        return;
-      }
-      if (message.includes("exist") || message.includes("already")) {
-        setFieldErrors({ email: "That email already has an account. Sign in instead." });
-        return;
-      }
-      if (message.includes("password")) {
-        setFieldErrors({ password: "Use at least 8 characters." });
-        return;
-      }
-
-      setError(readAuthError(signUpError, "We could not create the account. Try again."));
-      return;
-    }
-
-    // The account exists but is not usable until the address is proven.
-    const { error: sendError } = await authClient.emailOtp.sendVerificationOtp({
-      email: address,
-      type: "email-verification",
+      password,
     });
 
     setPending(false);
 
-    if (sendError) {
-      setError(
-        readAuthError(
-          sendError,
-          "Your account was created, but the code could not be sent. Use “Sign in with a code” to try again.",
-        ),
-      );
+    if (!result.ok) {
+      if (result.field === "username") {
+        setFieldErrors({ username: result.error });
+        return;
+      }
+      if (result.field === "password") {
+        setFieldErrors({ password: result.error });
+        return;
+      }
+      if (result.field === "email") {
+        setFieldErrors({ email: result.error });
+        return;
+      }
+      setError(result.error);
       return;
     }
 

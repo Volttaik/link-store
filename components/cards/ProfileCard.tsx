@@ -10,10 +10,10 @@
  * people in a list, an account at a glance.
  */
 
-import { Avatar } from "@heroui/react/avatar";
 import { Link } from "@heroui/react/link";
 import type { ReactNode } from "react";
 
+import { ChatAvatar } from "@/components/chat/ChatAvatar";
 import { Icon } from "@/components/ui/Icon";
 import { ButtonLink } from "@/components/ui/controls";
 
@@ -27,7 +27,6 @@ export function ProfileCard({
   name,
   handle,
   avatarUrl,
-  avatarFit = "cover",
   caption,
   stats,
   actionLabel = "View profile",
@@ -39,12 +38,6 @@ export function ProfileCard({
   /** The @handle — shown under the name when there is one. */
   handle?: string | null;
   avatarUrl?: string | null;
-  /**
-   * How the avatar is framed. A person's photo fills the circle (`cover`); a
-   * shop's logo is a mark on the profile-picture system and keeps its own
-   * proportions (`contain`) — never stretched, never cropped, never clipped.
-   */
-  avatarFit?: "contain" | "cover";
   /** One line of standing: what they are, where they are, since when. */
   caption?: ReactNode;
   stats?: ProfileStat[];
@@ -54,16 +47,14 @@ export function ProfileCard({
   const body = (
     <div className={`flex h-full flex-col gap-4 p-5 ${className ?? ""}`}>
       <div className="flex items-center gap-3.5">
-        <Avatar className="size-14 shrink-0 rounded-full ring-2 ring-surface-secondary">
-          {avatarUrl ? (
-            <Avatar.Image
-              alt={name}
-              className={avatarFit === "contain" ? "object-contain p-2" : "object-cover"}
-              src={avatarUrl}
-            />
-          ) : null}
-          <Avatar.Fallback>{name.slice(0, 2).toUpperCase()}</Avatar.Fallback>
-        </Avatar>
+        {/* The platform's profile-picture system — the same picture chat
+            draws, so an identity looks one way everywhere it appears. */}
+        <ChatAvatar
+          className="shrink-0 ring-2 ring-surface-secondary"
+          name={name}
+          size={56}
+          src={avatarUrl}
+        />
 
         <div className="min-w-0 flex-1">
           {/* The name is the doorway — links are never nested inside links. */}

@@ -5,19 +5,46 @@
  *
  * There is no sign-*in* action here on purpose: the engine's own endpoints do
  * that (a code, or Google), and the screens that call them are the ones in
- * `components/auth`. This file covers signing out and the complete password
- * reset flow: request a link, set a new password.
+ * `components/auth`. This file covers signing out, the complete password reset
+ * flow (request a link, set a new password), and the registration handshake —
+ * start, resend, verify — that keeps an account out of existence until its
+ * email has been proven (see `lib/auth/registration`).
  */
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 
 import { clearSession, getCurrentUser, revokeAllSessions } from "@/lib/auth";
 import { auth } from "@/lib/auth/server";
+import { CART_COOKIE, ORDER_ACCESS_COOKIE } from "@/lib/server/commerce";
+import {
+  resendRegistrationCode,
+  startRegistration,
+  verifyRegistration,
+} from "@/lib/auth/registration";
 
-export async function signOutAction(): Promise<void> {
+/**
+ * The browser-side shopping identity leaves with the session.
+ *
+ * The account's own basket is stored server-side against its user id, so
+ * signing back in restores it — but the guest cart cookie belongs to whoever
+ * was just using this browser, and must not be inherited by the next one.
+ */
+async function clearGuestCookies(): Promise<void> {
+  const store = await cookies();
+  store.delete(CART_COOKIE);
+  store.delete(ORDER_ACCESS_COOKIE);
+}
+
+export async function signOutAction(): Promise<{ ok: true }> {
   await clearSession();
-  redirect("/");
+  await clearGuestCookies();
+  // Every layout on the way out renders for a guest: the header, the menus and
+  // every account-specific surface are revalidated, so the browser never needs
+  // a manual refresh to see the signed-out state. No redirect from here — the
+  // caller navigates in place, so signing out is a state change, not a reload.
+  revalidatePath("/", "layout");
+  return { ok: true };
 }
 
 /**
@@ -35,9 +62,55 @@ export async function signOutEverywhereAction(): Promise<{
 
   await revokeAllSessions(user.id);
   await clearSession();
+  await clearGuestCookies();
   revalidatePath("/workspace/settings");
+  revalidatePath("/", "layout");
 
   return { ok: true, message: "You are signed out on every device." };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Registration — held until the email is verified                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The first step of creating an account: details in, a code to the address,
+ * and nothing at all written to the account tables yet. The account exists
+ * only after `verifyRegistrationAction` has checked the code on this server.
+ */
+export async function startRegistrationAction(input: {
+  email: string;
+  username: string;
+  password: string;
+  name?: string;
+}): Promise<
+  { ok: true; email: string } | { ok: false; error: string; field?: "email" | "username" | "password" }
+> {
+  return startRegistration({
+    email: input.email,
+    username: input.username,
+    name: input.name ?? input.username,
+    password: input.password,
+  });
+}
+
+/** A fresh code for a registration already in flight. */
+export async function resendRegistrationCodeAction(input: {
+  email: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  return resendRegistrationCode(input.email);
+}
+
+/**
+ * The only path to an account: the code checked here, server-side, and only
+ * then is the registration activated — account created, address marked
+ * verified, and the new account signed in.
+ */
+export async function verifyRegistrationAction(input: {
+  email: string;
+  otp: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  return verifyRegistration({ email: input.email, otp: input.otp });
 }
 
 /* -------------------------------------------------------------------------- */

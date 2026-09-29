@@ -13,7 +13,7 @@
  * The composition itself is this card's alone.
  */
 
-import { Avatar } from "@heroui/react/avatar";
+import { ChatAvatar } from "@/components/chat/ChatAvatar";
 import { Link } from "@heroui/react/link";
 
 import { CardBuyButton } from "@/components/marketplace/CardBuyButton";
@@ -82,18 +82,14 @@ export function ProductCard({
           className="flex min-w-0 items-center gap-2 text-[12.5px] text-muted no-underline transition-colors hover:text-foreground"
           href={`/@${listing.storeSlug}`}
         >
-          <Avatar className="size-6 shrink-0 rounded-lg">
-            {listing.storeLogoUrl ? (
-              <Avatar.Image
-                alt={listing.storeName}
-                className="object-contain p-1"
-                src={listing.storeLogoUrl}
-              />
-            ) : null}
-            <Avatar.Fallback className="rounded-lg">
-              {listing.storeName.slice(0, 1).toUpperCase()}
-            </Avatar.Fallback>
-          </Avatar>
+          {/* The sender's picture, exactly as chat draws one beside a message:
+              the same profile-picture component, the same size, the same fit. */}
+          <ChatAvatar
+            className="shrink-0"
+            name={listing.storeName}
+            size={32}
+            src={listing.storeLogoUrl}
+          />
           <span className="truncate font-medium text-foreground">{listing.storeName}</span>
           <span aria-hidden="true">·</span>
           <span className="truncate">{formatRelative(listing.createdAt)}</span>

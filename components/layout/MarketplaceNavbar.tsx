@@ -2,7 +2,7 @@
 
 import { Avatar, Badge, Button, Drawer, Dropdown, Label, Link, SearchField, useOverlayState } from "@heroui/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 
 import { AuthTriggerButton } from "@/components/auth/AuthTriggerButton";
 import { BrandMark, Icon, Wordmark, type IconName } from "@/components/ui/Icon";
@@ -74,6 +74,31 @@ export function MarketplaceNavbar({
   const searchParams = useSearchParams();
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const mobileNav = useOverlayState();
+  const [, startTransition] = useTransition();
+
+  /*
+   * Sign out, in place. The action ends the session, drops the browser-side
+   * shopping identity and revalidates every layout — so the header, the menus
+   * and every account-specific surface flip to the signed-out state at once,
+   * with no manual refresh and no stale cache of the previous account.
+   */
+  const signOut = () => {
+    mobileNav.close();
+    startTransition(async () => {
+      const { signOutAction } = await import("@/app/actions/auth");
+      try {
+        await signOutAction();
+        // In place: the revalidated layouts render the signed-out experience
+        // and the router lands on the marketplace home — no browser reload.
+        router.push("/");
+        router.refresh();
+      } catch {
+        // If the action truly failed, the sign-out route still ends the
+        // session — and reloads only in that fallback.
+        window.location.assign("/logout");
+      }
+    });
+  };
 
   // The three states, once, for every choice below.
   const isGuest = userState.kind === "guest";
@@ -242,6 +267,10 @@ export function MarketplaceNavbar({
                 <Dropdown.Menu
                   onAction={(key) => {
                     const target = String(key);
+                    if (target === "/logout") {
+                      signOut();
+                      return;
+                    }
                     if (target.startsWith("/")) router.push(target);
                   }}
                 >
@@ -500,14 +529,14 @@ export function MarketplaceNavbar({
                             Create Workspace
                           </Link>
                         )}
-                        <Link
-                          href="/logout"
-                          onClick={() => mobileNav.close()}
-                          className={`${ACCOUNT_ROW} text-danger hover:bg-danger/10`}
+                        <button
+                          className={`${ACCOUNT_ROW} w-full text-left text-danger hover:bg-danger/10`}
+                          onClick={signOut}
+                          type="button"
                         >
                           <Icon name="signOut" size={15} className="shrink-0" />
                           Sign out
-                        </Link>
+                        </button>
                       </div>
                     ) : (
                       <div className="mt-2.5 flex flex-col gap-2 pt-0.5">

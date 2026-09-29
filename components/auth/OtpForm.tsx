@@ -24,6 +24,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import {
+  resendRegistrationCodeAction,
+  verifyRegistrationAction,
+} from "@/app/actions/auth";
 import { AuthNotice } from "@/components/auth/AuthNotice";
 import { authClient } from "@/lib/auth/client";
 import { readAuthError } from "@/lib/auth/messages";
@@ -117,15 +121,25 @@ export function OtpForm({
     setVerifying(true);
     setProblem(null);
 
-    const { error } =
-      purpose === "email-verification"
-        ? await authClient.emailOtp.verifyEmail({ email, otp: value })
-        : await authClient.signIn.emailOtp({ email, otp: value });
+    let failure: string | null = null;
 
-    if (error) {
+    if (purpose === "email-verification") {
+      /*
+       * A registration is verified on the server: the code is checked there,
+       * and only then is the account created and the new account signed in.
+       * Nothing about this decision is ever left to the client.
+       */
+      const result = await verifyRegistrationAction({ email, otp: value });
+      if (!result.ok) failure = result.error;
+    } else {
+      const { error } = await authClient.signIn.emailOtp({ email, otp: value });
+      if (error) failure = readAuthError(error, "That code is not correct. Try again.");
+    }
+
+    if (failure) {
       submitted.current = "";
       setVerifying(false);
-      setProblem(readAuthError(error, "That code is not correct. Try again."));
+      setProblem(failure);
       setCode("");
       setCaret(0);
       field.current?.focus();
@@ -133,12 +147,15 @@ export function OtpForm({
     }
 
     // Signed in. In the overlay the caller decides what happens next; on a page
-    // `replace` is used, so Back never lands on an already-spent code.
+    // `replace` is used, so Back never lands on an already-spent code. Either
+    // way the server-rendered surfaces re-fetch for the new identity, so the
+    // signed-in state appears without a manual refresh.
     if (onVerified) {
       onVerified();
       return;
     }
     router.replace(next && next.startsWith("/") ? next : "/auth/continue");
+    router.refresh();
   }
 
   // A complete code verifies itself — there is nothing else to press.
@@ -152,17 +169,23 @@ export function OtpForm({
     setProblem(null);
     setSent(null);
 
-    const { error } = await authClient.emailOtp.sendVerificationOtp({
-      email,
-      type: purpose,
-    });
+    let failure: string | null = null;
+
+    if (purpose === "email-verification") {
+      const result = await resendRegistrationCodeAction({ email });
+      if (!result.ok) failure = result.error;
+    } else {
+      const { error } = await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: "sign-in",
+      });
+      if (error) failure = readAuthError(error, "We could not send another code. Try again shortly.");
+    }
 
     setSending(false);
 
-    if (error) {
-      setProblem(
-        readAuthError(error, "We could not send another code. Try again shortly."),
-      );
+    if (failure) {
+      setProblem(failure);
       return;
     }
 

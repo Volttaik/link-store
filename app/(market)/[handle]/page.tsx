@@ -17,7 +17,7 @@ import { getStoreRating } from "@/lib/server/management";
 import { recordAnalyticsEvent } from "@/lib/server/insights";
 import { storeCategoryMeta } from "@/lib/catalog";
 import { storeSocials as readSocials } from "@/lib/server/stores";
-import { formatDate, formatNumber, formatRelative } from "@/lib/format";
+import { formatDate, formatRelative } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -108,41 +108,61 @@ export default async function StorefrontPage({
         id="storefront-header"
         className="ls-tone bg-surface ls-elev-2"
         patternClassName="text-accent/10"
-        tintSrc={tintSource}
+        tintSrc={store.banner_url ? null : tintSource}
         tintStrength={0.8}
       >
-        {/* The cover photo's region: a band across the top on small screens,
-            its own slanted-edged region on the right from `lg` up. The slash
-            is structural (`.store-slash`), never an overlay on the image. */}
-        {store.banner_url ? (
-          <div
-            aria-hidden="true"
-            className="store-slash relative h-56 w-full overflow-hidden sm:h-72 lg:absolute lg:inset-y-0 lg:right-0 lg:h-auto lg:w-[46%]"
-          >
-            <img
-              alt=""
-              className="h-full w-full object-cover"
-              loading="lazy"
-              src={store.banner_url}
-            />
-          </div>
-        ) : (
-          /* The shop's pop when no cover is uploaded: the orb motif large in
-             the corner while the shop's own colour washes the surface — every
-             storefront feels like itself. */
-          <ThreeOrbs className="absolute -top-8 right-2 -z-10 h-56 w-56 opacity-70 sm:h-72 sm:w-72" />
-        )}
+        {/*
+          The cover photo's region — the right half of the composition from `lg`
+          up, a band across the top on small screens. It is always present, so
+          the header always reads as two clear regions: the store's identity on
+          one side, the cover area on the other. The slash between them is
+          structural — it is the region's own slanted edge (`.store-slash`),
+          with the seam (`.store-slash-seam`) and the identity side's cast depth
+          (`.store-slash-depth`) riding the same diagonal — never an overlay on
+          the image. The photograph paints exactly as uploaded: fitted, raw,
+          with no scrim, fade or blur over it.
+        */}
         <div
-          className={`relative z-10 mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:py-14 ${
-            store.banner_url ? "lg:pr-[50%]" : ""
-          }`}
+          aria-hidden="true"
+          className="relative h-56 w-full sm:h-72 lg:absolute lg:inset-y-0 lg:right-0 lg:h-auto lg:w-[54%]"
         >
-          <div className="flex flex-col items-start gap-5">
+          <div className="store-slash-depth store-slash absolute inset-0" />
+          <div className="store-slash-seam store-slash absolute inset-0" />
+          <div className="store-slash absolute inset-0 overflow-hidden">
+            {store.banner_url ? (
+              <img
+                alt=""
+                className="h-full w-full object-cover"
+                loading="lazy"
+                src={store.banner_url}
+              />
+            ) : (
+              /* No cover uploaded: the region stands as the shop's own quiet
+                 panel — tone and the orb motif standing in for the photograph,
+                 so the split is still the shape of the header. */
+              <div className="ls-tone relative h-full w-full bg-surface-secondary/50">
+                <ThreeOrbs className="absolute -top-8 right-2 h-56 w-56 opacity-70 sm:h-72 sm:w-72" />
+              </div>
+            )}
+          </div>
+        </div>
+        {/* The identity region — the store's signboard, on its own plate so the
+            left half reads as a designed storefront identity area rather than
+            as bare text beside a photograph. Clear of the slash at every width,
+            so nothing is ever placed over the cover. */}
+        <div className="relative z-10 mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:py-14 lg:pr-[54%]">
+          <div className="rounded-3xl bg-surface p-6 shadow-elev-2 ring-1 ring-foreground/8 sm:p-7">
+            <div className="flex flex-col items-start gap-5">
             {/* The store's mark, on the profile-picture system: fitted
                 proportionally inside its plate with room to breathe — square
                 stays square, wide stays wide, and nothing is stretched,
                 cropped or clipped at the edges. */}
-            <Avatar size="lg" className="h-20 w-20 shrink-0 text-xl sm:h-24 sm:w-24">
+            {/* The sign plate: the mark raised on the identity surface, so the
+                logo reads as the shop's sign rather than as a loose image. */}
+            <Avatar
+              size="lg"
+              className="h-20 w-20 shrink-0 text-xl shadow-elev-2 ring-1 ring-foreground/8 sm:h-24 sm:w-24"
+            >
               {store.logo_url ?? undefined ? (
               <Avatar.Image alt="" className="object-contain p-2" src={store.logo_url ?? undefined} />
               ) : null}
@@ -174,17 +194,15 @@ export default async function StorefrontPage({
                 {store.tagline ? ` · ${store.tagline}` : ""}
               </p>
 
+              {/* The one flourish of the accent trio, under the name: the
+                  identity area's signature, kept to a hairline. */}
+              <span
+                aria-hidden="true"
+                className="block h-1 w-12 rounded-full bg-gradient-to-r from-iris-deep via-iris to-milk"
+              />
+
               <div className="flex flex-wrap items-center gap-4 text-xs text-muted">
                 <RatingStars rating={rating.average} count={rating.count} />
-                <span>
-                  {formatNumber(card.publishedListingCount)}{" "}
-                  {card.publishedListingCount === 1 ? "item" : "items"}
-                </span>
-                {events.length > 0 ? (
-                  <span>
-                    {events.length} {events.length === 1 ? "event" : "events"}
-                  </span>
-                ) : null}
                 <span>Joined {formatDate(card.createdAt)}</span>
                 {store.city ? <span>{store.city}</span> : null}
               </div>
@@ -222,6 +240,7 @@ export default async function StorefrontPage({
                   />
                 )}
               </div>
+            </div>
             </div>
           </div>
         </div>
@@ -293,11 +312,7 @@ export default async function StorefrontPage({
                     handle={neighbour.slug}
                     href={`/@${neighbour.slug}`}
                     name={neighbour.name}
-                    avatarFit="contain"
-                    stats={[
-                      { value: neighbour.publishedListingCount, label: "items" },
-                      { value: formatRelative(neighbour.createdAt), label: "joined" },
-                    ]}
+                    stats={[{ value: formatRelative(neighbour.createdAt), label: "joined" }]}
                   />
                 ))}
               </div>

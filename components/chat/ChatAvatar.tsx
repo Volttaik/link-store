@@ -1,12 +1,13 @@
 "use client";
 
 /**
- * The chat system's own avatar.
+ * The platform's profile picture.
  *
  * A real picture where one exists, a quiet initial where one does not — drawn
- * from the person's own name, never a placeholder face. This is a chat
- * primitive, not a general-purpose component: its sizes are the ones the
- * conversation surfaces actually use.
+ * from the person's own name, never a placeholder face. This is the picture
+ * system that chat draws beside a conversation, and it is the same system the
+ * marketplace draws for a shop or a seller beside its wares: one component, one
+ * fit, one treatment, so a profile picture looks the same wherever it appears.
  */
 
 export function ChatAvatar({

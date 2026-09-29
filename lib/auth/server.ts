@@ -335,6 +335,12 @@ export const auth = betterAuth({
     emailOTP({
       otpLength: 6,
       expiresIn: OTP_TTL_SECONDS,
+      // A code can only *sign in* to an account that already exists — it must
+      // never conjure one up. With this off, the engine's own sign-in-with-code
+      // endpoint refuses to create a user, so the only way an account is ever
+      // born is the verified registration handshake (or Google): no verified
+      // email, no account.
+      disableSignUp: true,
       async sendVerificationOTP({ email, otp }) {
         // A failed send must surface as a failed request, not a silent no-op:
         // the person is waiting for a code that would never arrive.

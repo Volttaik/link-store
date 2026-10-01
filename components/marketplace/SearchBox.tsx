@@ -26,7 +26,7 @@ export function SearchBox({ initialQuery = "" }: { initialQuery?: string }) {
       }}
     >
       <SearchField
-        aria-label="Search Link Store"
+        aria-label="Search Rush Cart"
         value={query}
         onChange={setQuery}
         onSubmit={submit}
@@ -34,7 +34,7 @@ export function SearchBox({ initialQuery = "" }: { initialQuery?: string }) {
       >
         <SearchField.Group>
           <SearchField.SearchIcon />
-          <SearchField.Input placeholder="Search for anything: sneakers, jollof, tickets, design work" />
+          <SearchField.Input placeholder="Search products, stores, people and Events" />
           <SearchField.ClearButton />
         </SearchField.Group>
       </SearchField>

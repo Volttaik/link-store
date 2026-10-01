@@ -16,12 +16,13 @@
 import { ChatAvatar } from "@/components/chat/ChatAvatar";
 import { Link } from "@heroui/react/link";
 
+import { ProductImage } from "@/components/marketplace/ProductImage";
 import { CardBuyButton } from "@/components/marketplace/CardBuyButton";
 import { Icon } from "@/components/ui/Icon";
 import { ButtonLink } from "@/components/ui/controls";
 import { MediaPlaceholder, PriceTag } from "@/components/ui/atoms";
 import { listingFacts, listingTypeIcon, listingTypeMeta, type ListingFact } from "@/lib/catalog";
-import { formatRelative, truncate } from "@/lib/format";
+import { truncate } from "@/lib/format";
 import type { ListingCardData } from "@/lib/types";
 
 /**
@@ -57,9 +58,11 @@ export function ProductCard({
   showStore = true,
   compact = false,
   showBuy = true,
+  presentation = "market",
 }: {
   listing: ListingCardData;
   showStore?: boolean;
+  presentation?: "market" | "shop";
   /** Tighter media and a shorter fact list, for a dense rail. */
   compact?: boolean;
   /**
@@ -75,7 +78,7 @@ export function ProductCard({
   const facts = listingFacts(listing);
 
   return (
-    <article className="flex h-full flex-col gap-2.5 motion-safe:animate-bubble">
+    <article data-product-card={listing.id} className={`product-card flex h-full min-w-0 flex-col gap-2.5 motion-safe:animate-settle ${presentation === "shop" ? "shop-product" : ""}`}>
       {/* The sender line: the shop this product message comes from. */}
       {showStore ? (
         <Link
@@ -91,27 +94,20 @@ export function ProductCard({
             src={listing.storeLogoUrl}
           />
           <span className="truncate font-medium text-foreground">{listing.storeName}</span>
-          <span aria-hidden="true">·</span>
-          <span className="truncate">{formatRelative(listing.createdAt)}</span>
         </Link>
       ) : null}
 
       {/* The bubble itself. */}
-      <div className="ls-bubble ls-lift flex h-full flex-col">
+      <div className={`${presentation === "shop" ? "rounded-[1.75rem] border border-border/60 bg-surface" : "ls-bubble ls-lift"} flex h-full min-w-0 flex-col overflow-hidden`}>
         <Link
           aria-label={listing.title}
           className={`media-frame mx-2.5 mt-2.5 block overflow-hidden bg-surface-secondary no-underline ${
-            compact ? "aspect-16/10" : "aspect-4/3"
+            presentation === "shop" ? "aspect-[4/5] rounded-[1.25rem]" : compact ? "aspect-16/10" : "aspect-4/3"
           }`}
           href={`/listing/${listing.id}`}
         >
           {listing.imageUrl ? (
-            <img
-              alt={listing.title}
-              className="h-full w-full object-cover transition-transform duration-500 ease-out motion-safe:hover:scale-[1.04]"
-              loading="lazy"
-              src={listing.imageUrl}
-            />
+            <ProductImage key={listing.imageUrl} src={listing.imageUrl} title={listing.title} />
           ) : (
             <MediaPlaceholder label={meta.label} />
           )}
@@ -134,7 +130,7 @@ export function ProductCard({
           </div>
         ) : null}
 
-        <div className="flex flex-1 flex-col gap-3 p-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-3 p-4">
           <div className="flex min-w-0 flex-col gap-1.5">
             <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium tracking-wide text-muted uppercase">
               <Icon name={listingTypeIcon(listing.type)} size={11} className="shrink-0" />
@@ -142,7 +138,7 @@ export function ProductCard({
             </span>
 
             <Link
-              className="line-clamp-2 text-[15.5px] leading-snug font-semibold text-foreground no-underline"
+              className="line-clamp-2 break-words text-[15.5px] leading-snug font-semibold text-foreground no-underline"
               href={`/listing/${listing.id}`}
             >
               {truncate(listing.title, 72)}

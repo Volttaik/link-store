@@ -133,6 +133,14 @@ function openStream() {
   };
 }
 
+/** Immediately discard account-scoped stream/subscribers at sign-out. */
+export function resetChatRealtime(): void {
+  source?.close(); source = null;
+  if (retryTimer !== null) clearTimeout(retryTimer);
+  retryTimer = null; openedBefore = false; retryDelay = 1000;
+  handlers.clear();
+}
+
 /** Subscribe to chat events. The returned function detaches — always call it. */
 export function subscribeChat(chatHandlers: ChatEventHandlers): () => void {
   handlers.add(chatHandlers);

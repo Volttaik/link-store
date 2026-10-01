@@ -13,13 +13,14 @@
 
 import "server-only";
 
+import { sendAccountPush } from "./push";
 import { listingIsCartable } from "../catalog";
-import { bool, batch, execute, query, queryOne, type BatchStatement } from "../db";
+import { db, bool, batch, execute, query, queryOne, type BatchStatement } from "../db";
 import { nowIso } from "../format";
 import { newId, newOrderNumber, randomCode, randomHex } from "../ids";
 import { percentOf } from "../money";
 import { platformConfig } from "../env";
-import { refundTransaction, verifyTransaction } from "../paystack";
+import { refundTransaction, verifyTransaction, type PaystackVerification } from "../paystack";
 import {
   sendOrderCancelledEmail,
   sendOrderCompletedEmail,
@@ -44,15 +45,12 @@ import type {
   CartRow,
   CartStoreGroup,
   CartView,
-  DigitalAssetRow,
-  DownloadRow,
   ListingRow,
   OrderItemRow,
   OrderRow,
   OrderWithItems,
   PaymentRow,
   StoreRow,
-  TicketWithEvent,
 } from "../types";
 
 export const CART_COOKIE = "ls_cart";
@@ -132,9 +130,11 @@ export async function getOrCreateCart(
         [token],
       );
       if (guest) {
-        await execute("UPDATE carts SET user_id = ? WHERE id = ?", [userId, guest.id]);
-        guest.user_id = userId;
-        return { cart: guest, token };
+        const claim = await execute("UPDATE carts SET user_id = ? WHERE id = ? AND user_id IS NULL AND status = 'active'", [userId, guest.id]);
+        if (claim.rowsAffected === 1) {
+          guest.user_id = userId;
+          return { cart: guest, token };
+        }
       }
     }
   } else if (token) {
@@ -159,22 +159,6 @@ export async function getOrCreateCart(
   const cart = await queryOne<CartRow>("SELECT * FROM carts WHERE id = ?", [id]);
   return { cart: cart as CartRow, token: freshToken };
 }
-
-type CartJoinRow = CartItemView & {
-  cart_id: string;
-  listing_price: number;
-  listing_currency: string;
-  listing_status: string;
-  list_stock: number;
-  list_track: number;
-  variant_price: number | null;
-  variant_stock: number | null;
-  ticket_price: number | null;
-  ticket_active: number | null;
-  quantity_total: number | null;
-  quantity_sold: number | null;
-  event_status: string | null;
-};
 
 /**
  * The basket, with every line's seller resolved from its listing.
@@ -209,14 +193,6 @@ export async function getCartView(cartId: string): Promise<CartView | null> {
     variant_name: string | null;
     variant_price: number | null;
     variant_stock: number | null;
-    ticket_name: string | null;
-    ticket_price: number | null;
-    ticket_active: number | null;
-    quantity_total: number | null;
-    quantity_sold: number | null;
-    event_id: string | null;
-    event_title: string | null;
-    event_status: string | null;
   }>(
     `SELECT ci.id, ci.listing_id, ci.variant_id, ci.ticket_type_id, ci.quantity, ci.unit_price, ci.currency,
             l.title, l.slug, l.type, l.fulfilment, l.price AS listing_price, l.status AS listing_status,
@@ -224,33 +200,23 @@ export async function getCartView(cartId: string): Promise<CartView | null> {
             s.id AS store_id, s.name AS store_name, s.slug AS store_slug,
             (SELECT li.image_url FROM listing_images li WHERE li.listing_id = l.id
               ORDER BY li.position ASC, li.created_at ASC LIMIT 1) AS image_url,
-            lv.name AS variant_name, lv.price AS variant_price, lv.stock AS variant_stock,
-            tt.name AS ticket_name, tt.price AS ticket_price, tt.is_active AS ticket_active,
-            tt.quantity_total, tt.quantity_sold,
-            e.id AS event_id, e.title AS event_title, e.status AS event_status
+            lv.name AS variant_name, lv.price AS variant_price, lv.stock AS variant_stock
      FROM cart_items ci
      JOIN listings l ON l.id = ci.listing_id
      JOIN stores s ON s.id = l.store_id
      LEFT JOIN listing_variants lv ON lv.id = ci.variant_id
-     LEFT JOIN ticket_types tt ON tt.id = ci.ticket_type_id
-     LEFT JOIN events e ON e.id = tt.event_id
-     WHERE ci.cart_id = ?
+     WHERE ci.cart_id = ? AND l.type = 'product'
      ORDER BY s.name ASC, ci.created_at ASC`,
     [cartId],
   );
 
   const items: CartItemView[] = rows.map((row) => {
-    const isTicket = Boolean(row.ticket_type_id);
-    const currentPrice = isTicket
-      ? Number(row.ticket_price ?? 0)
-      : row.variant_price !== null && row.variant_price !== undefined
+    const currentPrice = row.variant_price !== null && row.variant_price !== undefined
         ? Number(row.variant_price)
         : Number(row.listing_price);
 
     const trackInventory = bool(row.list_track);
-    const availableStock = isTicket
-      ? Math.max(0, Number(row.quantity_total ?? 0) - Number(row.quantity_sold ?? 0))
-      : row.variant_id && row.variant_stock !== null
+    const availableStock = row.variant_id && row.variant_stock !== null
         ? Number(row.variant_stock)
         : trackInventory
           ? Number(row.list_stock)
@@ -260,25 +226,23 @@ export async function getCartView(cartId: string): Promise<CartView | null> {
       id: row.id,
       listingId: row.listing_id,
       variantId: row.variant_id,
-      ticketTypeId: row.ticket_type_id,
-      title: isTicket
-        ? `${row.event_title ?? "Event"} · ${row.ticket_name ?? "Ticket"}`
-        : row.title,
+      ticketTypeId: null,
+      title: row.title,
       variantName: row.variant_name,
       imageUrl: row.image_url,
       slug: row.slug,
-      type: isTicket ? "ticket" : row.type,
-      fulfilment: (isTicket ? "ticket" : row.fulfilment) as CartItemView["fulfilment"],
+      type: row.type,
+      fulfilment: row.fulfilment as CartItemView["fulfilment"],
       quantity: Number(row.quantity),
       unitPrice: Number(row.unit_price),
       lineTotal: Number(row.unit_price) * Number(row.quantity),
       currency: row.currency,
       currentPrice,
       availableStock,
-      trackInventory: isTicket || trackInventory,
-      status: isTicket ? (row.event_status ?? "draft") : row.listing_status,
-      eventId: row.event_id,
-      eventTitle: row.event_title,
+      trackInventory,
+      status: row.listing_status,
+      eventId: null,
+      eventTitle: null,
     };
   });
 
@@ -322,7 +286,6 @@ export async function getCartView(cartId: string): Promise<CartView | null> {
 export type AddToCartInput = {
   listingId?: string;
   variantId?: string | null;
-  ticketTypeId?: string | null;
   quantity: number;
   cartToken: string | null;
   userId: string | null;
@@ -335,25 +298,13 @@ export type AddToCartResult =
   | { ok: false; error: string };
 
 export async function addToCart(input: AddToCartInput): Promise<AddToCartResult> {
-  const quantity = Math.max(1, Math.min(Math.floor(input.quantity || 1), MAX_LINE_QUANTITY));
+  if (!Number.isSafeInteger(input.quantity) || input.quantity < 1 || input.quantity > MAX_LINE_QUANTITY) return { ok: false, error: "Choose a whole-number quantity between 1 and 50." };
+  const quantity = input.quantity;
 
   let listing: ListingRow | null = null;
   let price = 0;
   let currency = "NGN";
   let storeId = "";
-
-  // Tickets never enter the cart. An admission is bought directly — see
-  // `createTicketOrder` — because a ticket is not stock: what a ticket quantity
-  // produces is one ticket per admission, issued on payment. Refusing here means
-  // the rule holds at the only door a cart line can be created through, whatever
-  // the browser asks for.
-  if (input.ticketTypeId) {
-    return {
-      ok: false,
-      error:
-        "Tickets are bought directly, not through the cart. Open the event and choose your tickets there.",
-    };
-  }
 
   if (!input.listingId) return { ok: false, error: "No item was specified." };
 
@@ -361,24 +312,7 @@ export async function addToCart(input: AddToCartInput): Promise<AddToCartResult>
   if (!listing) return { ok: false, error: "That item no longer exists." };
   storeId = listing.store_id;
 
-  // The basket holds goods, meals and bookable services — nothing else. A
-  // rental is an agreement made in the conversation (it is opened, not bought),
-  // and an admission is one individual ticket bought directly. Neither can ever
-  // be a cart line, whatever any client asks for — this is the one door a line
-  // can be created through.
-  if (listing.type === "rental") {
-    return {
-      ok: false,
-      error:
-        "Rentals are not bought through the cart. Open the listing and agree the terms with the owner in the conversation.",
-    };
-  }
-  if (!listingIsCartable(listing.type) || listing.fulfilment === "ticket") {
-    return {
-      ok: false,
-      error: "Tickets are bought directly, not through the cart. Open the event and choose your tickets there.",
-    };
-  }
+  if (!listingIsCartable(listing.type)) return { ok: false, error: "This product is no longer available." };
 
   const store = await queryOne<StoreRow>("SELECT * FROM stores WHERE id = ?", [storeId]);
   const isOwner = Boolean(input.viewerUserId && store && store.user_id === input.viewerUserId);
@@ -410,18 +344,6 @@ export async function addToCart(input: AddToCartInput): Promise<AddToCartResult>
     };
   }
 
-  // A digital product with no file attached cannot be delivered, so it must
-  // never be purchasable.
-  if (listing.fulfilment === "digital") {
-    const asset = await queryOne<{ id: string }>(
-      "SELECT id FROM digital_assets WHERE listing_id = ? LIMIT 1",
-      [listing.id],
-    );
-    if (!asset) {
-      return { ok: false, error: "This digital product has no file attached yet." };
-    }
-  }
-
   // One basket per shopper: adding from a second store joins the same cart.
   const { cart, token } = await getOrCreateCart(input.cartToken, input.userId);
 
@@ -435,8 +357,8 @@ export async function addToCart(input: AddToCartInput): Promise<AddToCartResult>
       listing.id,
       input.variantId ?? null,
       input.variantId ?? null,
-      input.ticketTypeId ?? null,
-      input.ticketTypeId ?? null,
+      null,
+      null,
     ],
   );
 
@@ -444,6 +366,10 @@ export async function addToCart(input: AddToCartInput): Promise<AddToCartResult>
 
   if (existing) {
     const nextQuantity = Math.min(MAX_LINE_QUANTITY, Number(existing.quantity) + quantity);
+    if (bool(listing.track_inventory)) {
+      const available = input.variantId ? await queryOne<{ stock: number }>("SELECT stock FROM listing_variants WHERE id = ? AND listing_id = ?", [input.variantId, listing.id]) : listing;
+      if (!available || nextQuantity > Number(available.stock)) return { ok: false, error: `Only ${available?.stock ?? 0} left in stock.` };
+    }
     await execute(
       "UPDATE cart_items SET quantity = ?, unit_price = ?, updated_at = ? WHERE id = ? AND cart_id = ?",
       [nextQuantity, price, timestamp, existing.id, cart.id],
@@ -458,7 +384,7 @@ export async function addToCart(input: AddToCartInput): Promise<AddToCartResult>
         cart.id,
         listing.id,
         input.variantId ?? null,
-        input.ticketTypeId ?? null,
+        null,
         quantity,
         price,
         currency,
@@ -491,6 +417,7 @@ export async function updateCartItem(
   itemId: string,
   quantity: number,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!Number.isSafeInteger(quantity) || quantity < 0 || quantity > MAX_LINE_QUANTITY) return { ok: false, error: "Choose a whole-number quantity between 0 and 50." };
   const item = await queryOne<{ id: string; listing_id: string; variant_id: string | null; ticket_type_id: string | null }>(
     "SELECT id, listing_id, variant_id, ticket_type_id FROM cart_items WHERE id = ? AND cart_id = ?",
     [itemId, cartId],
@@ -509,16 +436,7 @@ export async function updateCartItem(
   ]);
   if (!listing) return { ok: false, error: "That item no longer exists." };
 
-  if (item.ticket_type_id) {
-    const ticket = await queryOne<{ quantity_total: number; quantity_sold: number }>(
-      "SELECT quantity_total, quantity_sold FROM ticket_types WHERE id = ?",
-      [item.ticket_type_id],
-    );
-    if (ticket && Number(ticket.quantity_total) > 0) {
-      const remaining = Number(ticket.quantity_total) - Number(ticket.quantity_sold);
-      if (capped > remaining) return { ok: false, error: `Only ${remaining} ticket(s) left.` };
-    }
-  } else if (bool(listing.track_inventory)) {
+  if (bool(listing.track_inventory)) {
     const stock = item.variant_id
       ? Number(
           (
@@ -567,7 +485,7 @@ export async function getCartSummary(
      FROM cart_items ci
      JOIN listings l ON l.id = ci.listing_id
      JOIN stores s ON s.id = l.store_id
-     WHERE ci.cart_id = ?`,
+     WHERE ci.cart_id = ? AND l.type = 'product'`,
     [cart.id],
   );
 
@@ -834,7 +752,7 @@ export async function createOrderFromCart(input: {
   storeId?: string | null;
 }): Promise<CreateOrderResult> {
   const cart = await queryOne<CartRow>("SELECT * FROM carts WHERE id = ?", [input.cartId]);
-  if (!cart) return { ok: false, error: "Your cart could not be found." };
+  if (!cart || cart.status !== "active" || cart.user_id !== input.userId) return { ok: false, error: "Your cart could not be found." };
 
   const view = await getCartView(input.cartId);
   if (!view || view.items.length === 0) return { ok: false, error: "Your cart is empty." };
@@ -870,7 +788,7 @@ export async function createOrderFromCart(input: {
   }
 
   const store = await queryOne<StoreRow>("SELECT * FROM stores WHERE id = ?", [storeId]);
-  if (!store) return { ok: false, error: "This store is no longer available." };
+  if (!store || !bool(store.is_published)) return { ok: false, error: "This store is no longer available." };
 
   const settings = await getStoreSettings(storeId);
 
@@ -880,7 +798,7 @@ export async function createOrderFromCart(input: {
   // what this buyer was promised.
   const fulfilmentMethod = deriveFulfilmentMethod(
     cartItems.map((item) => ({
-      item_type: item.ticketTypeId ? "ticket" : item.fulfilment === "digital" ? "digital" : item.type,
+      item_type: "product",
       fulfilment: item.fulfilment,
     })),
   );
@@ -979,21 +897,13 @@ export async function createOrderFromCart(input: {
   // Line items snapshot title and price so an order stays historically accurate
   // even if the seller later edits or deletes the listing.
   for (const item of cartItems) {
-    const itemType = item.ticketTypeId
-      ? "ticket"
-      : item.fulfilment === "digital"
-        ? "digital"
-        : item.type === "food"
-          ? "food"
-          : item.type === "service"
-            ? "service"
-            : "product";
+    const itemType = "product";
 
     statements.push({
       sql: `INSERT INTO order_items
               (id, order_id, item_type, listing_id, variant_id, ticket_type_id, event_id, title,
                variant_name, unit_price, quantity, total, currency, metadata, fulfilment_status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         newId("oitem"),
         orderId,
@@ -1008,30 +918,15 @@ export async function createOrderFromCart(input: {
         item.quantity,
         item.currentPrice * item.quantity,
         item.currency,
-        itemType === "digital" ? "pending_delivery" : "unfulfilled",
+        JSON.stringify({ cartId: cart.id, cartItemId: item.id }),
+        "unfulfilled",
         timestamp,
       ],
     });
   }
 
-  // Only this store's lines leave the basket. Anything the shopper added from
-  // another shop stays behind, so the basket stays usable after each payment.
-  for (const item of cartItems) {
-    statements.push({
-      sql: "DELETE FROM cart_items WHERE id = ?",
-      args: [item.id],
-    });
-  }
-
-  const remaining = view.items.length - cartItems.length;
-
-  statements.push({
-    sql:
-      remaining > 0
-        ? "UPDATE carts SET updated_at = ? WHERE id = ?"
-        : "UPDATE carts SET status = 'converted', updated_at = ? WHERE id = ?",
-    args: [timestamp, cart.id],
-  });
+  // Keep the basket until payment is verified. Failed/abandoned payment must
+  // not destroy the buyer's products. The order snapshots the purchased lines.
 
   await batch(statements);
 
@@ -1042,241 +937,6 @@ export async function createOrderFromCart(input: {
     storeId,
     eventType: "checkout_start",
     userId: input.userId,
-  });
-
-  return { ok: true, order };
-}
-
-/**
- * Buy tickets — a ticket purchase, not a cart line.
- *
- * Tickets are deliberately *not* physical products, and the shopping cart is for
- * physical products: putting an admission in the same basket as a pair of shoes
- * means a ticket quantity can be edited, re-priced or abandoned like stock, when
- * what actually happens at the end of it is five admissions issued one by one.
- * So a ticket purchase is its own flow straight to a paid order, and this is it.
- *
- * Nothing here trusts the browser. Each line is re-read from the database and
- * must belong to *this* event, be on sale, be inside its sales window and have
- * the capacity left for it; the price and the total are the database's. One
- * order is created per event, paid once, and fulfilment issues one ticket row
- * per admission afterwards, exactly as it always has.
- */
-export type TicketPurchaseLine = { ticketTypeId: string; quantity: number };
-
-export async function createTicketOrder(input: {
-  eventId: string;
-  userId: string | null;
-  customer: CheckoutCustomer;
-  lines: TicketPurchaseLine[];
-}): Promise<CreateOrderResult> {
-  // An event has no currency of its own — the shop's currency is the money
-  // everything in that shop is priced in, and it is read from the shop.
-  const event = await queryOne<{
-    id: string;
-    store_id: string;
-    title: string;
-    status: string;
-    currency: string | null;
-    listing_id: string | null;
-  }>(
-    `SELECT e.id, e.store_id, e.title, e.status, e.listing_id,
-            (SELECT currency FROM stores WHERE id = e.store_id) AS currency
-       FROM events e WHERE e.id = ?`,
-    [input.eventId],
-  );
-
-  if (!event) return { ok: false, error: "That event no longer exists." };
-  if (event.status !== "published") {
-    return { ok: false, error: "Tickets for this event are not on sale." };
-  }
-
-  // One line per ticket type, however many times the request named it.
-  const wanted = new Map<string, number>();
-  for (const line of input.lines) {
-    const quantity = Math.floor(Number(line.quantity) || 0);
-    if (!line.ticketTypeId || quantity <= 0) continue;
-    wanted.set(line.ticketTypeId, (wanted.get(line.ticketTypeId) ?? 0) + quantity);
-  }
-
-  if (wanted.size === 0) return { ok: false, error: "Choose at least one ticket." };
-
-  const timestamp = nowIso();
-  const lines: Array<{
-    ticketTypeId: string;
-    name: string;
-    price: number;
-    quantity: number;
-  }> = [];
-
-  let subtotal = 0;
-
-  for (const [ticketTypeId, quantity] of wanted) {
-    const type = await queryOne<{
-      id: string;
-      name: string;
-      price: number;
-      currency: string;
-      is_active: number;
-      quantity_total: number;
-      quantity_sold: number;
-      max_per_order: number;
-      sales_start: string | null;
-      sales_end: string | null;
-    }>("SELECT * FROM ticket_types WHERE id = ? AND event_id = ?", [ticketTypeId, event.id]);
-
-    if (!type) return { ok: false, error: "One of those ticket types is not for this event." };
-    if (!bool(type.is_active)) return { ok: false, error: `“${type.name}” is not on sale.` };
-
-    if (type.sales_start && timestamp < type.sales_start) {
-      return { ok: false, error: `“${type.name}” is not on sale yet.` };
-    }
-    if (type.sales_end && timestamp > type.sales_end) {
-      return { ok: false, error: `Sales for “${type.name}” have closed.` };
-    }
-
-    const perOrder = Math.max(1, Number(type.max_per_order) || MAX_LINE_QUANTITY);
-    if (quantity > perOrder) {
-      return {
-        ok: false,
-        error: `You can buy up to ${perOrder} “${type.name}” tickets in one order.`,
-      };
-    }
-
-    const total_quantity = Number(type.quantity_total);
-    if (total_quantity > 0) {
-      const remaining = Math.max(0, total_quantity - Number(type.quantity_sold));
-      if (remaining < quantity) {
-        return {
-          ok: false,
-          error:
-            remaining <= 0
-              ? `“${type.name}” is sold out.`
-              : `Only ${remaining} “${type.name}” ticket(s) left.`,
-        };
-      }
-    }
-
-    lines.push({ ticketTypeId: type.id, name: type.name, price: Number(type.price), quantity });
-    subtotal += Number(type.price) * quantity;
-  }
-
-  const currency = event.currency ?? "NGN";
-  if (!["NGN", "USD", "GHS", "ZAR", "KES"].includes(currency)) {
-    return { ok: false, error: `Payments in ${currency} are not supported by Paystack.` };
-  }
-
-  const email = input.customer.email.trim().toLowerCase();
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    return { ok: false, error: "Enter a valid email address." };
-  }
-
-  const store = await queryOne<StoreRow>("SELECT * FROM stores WHERE id = ?", [event.store_id]);
-  if (!store) return { ok: false, error: "This event is no longer available." };
-
-  const settings = await getStoreSettings(event.store_id);
-  const existingCustomer = await queryOne<{ id: string }>(
-    "SELECT id FROM customers WHERE store_id = ? AND email = ?",
-    [event.store_id, email],
-  );
-
-  const customerId = existingCustomer?.id ?? newId("cus");
-  const orderId = newId("ord");
-  const orderNumber = newOrderNumber(settings.order_prefix);
-  const accessToken = randomCode(40);
-  const receiptCode = `RC-${randomHex(8)}`;
-
-  const statements: BatchStatement[] = [];
-
-  if (!existingCustomer) {
-    statements.push({
-      sql: `INSERT INTO customers (id, store_id, user_id, email, name, phone, orders_count, total_spent, last_order_at, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 0, 0, NULL, ?, ?)`,
-      args: [
-        customerId,
-        event.store_id,
-        input.userId,
-        email,
-        input.customer.name?.trim() || null,
-        input.customer.phone?.trim() || null,
-        timestamp,
-        timestamp,
-      ],
-    });
-  } else {
-    statements.push({
-      sql: `UPDATE customers SET name = COALESCE(?, name), phone = COALESCE(?, phone),
-              user_id = COALESCE(user_id, ?), updated_at = ? WHERE id = ?`,
-      args: [
-        input.customer.name?.trim() || null,
-        input.customer.phone?.trim() || null,
-        input.userId,
-        timestamp,
-        customerId,
-      ],
-    });
-  }
-
-  statements.push({
-    sql: `INSERT INTO orders
-            (id, order_number, store_id, customer_id, user_id, email, customer_name, phone,
-             currency, subtotal, discount_total, shipping_total, tax_total, total, status,
-             payment_status, discount_code, customer_note, shipping_address, access_token, source,
-             fulfilment_method, estimated_delivery, receipt_code, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, 'pending', 'unpaid', NULL, ?, NULL, ?, 'tickets',
-                  'none', NULL, ?, ?, ?)`,
-    args: [
-      orderId,
-      orderNumber,
-      event.store_id,
-      customerId,
-      input.userId,
-      email,
-      input.customer.name?.trim() || null,
-      input.customer.phone?.trim() || null,
-      currency,
-      subtotal,
-      subtotal,
-      input.customer.note?.trim() || null,
-      accessToken,
-      receiptCode,
-      timestamp,
-      timestamp,
-    ],
-  });
-
-  for (const line of lines) {
-    statements.push({
-      sql: `INSERT INTO order_items
-              (id, order_id, item_type, listing_id, variant_id, ticket_type_id, event_id, title,
-               variant_name, unit_price, quantity, total, currency, metadata, fulfilment_status, created_at)
-            VALUES (?, ?, 'ticket', ?, NULL, ?, ?, ?, NULL, ?, ?, ?, ?, NULL, 'unfulfilled', ?)`,
-      args: [
-        newId("oitem"),
-        orderId,
-        event.listing_id,
-        line.ticketTypeId,
-        event.id,
-        `${event.title} · ${line.name}`,
-        line.price,
-        line.quantity,
-        line.price * line.quantity,
-        currency,
-        timestamp,
-      ],
-    });
-  }
-
-  await batch(statements);
-
-  const order = await queryOne<OrderRow>("SELECT * FROM orders WHERE id = ?", [orderId]);
-  if (!order) return { ok: false, error: "The order could not be created." };
-
-  await recordAnalyticsEvent({
-    storeId: event.store_id,
-    eventType: "checkout_start",
-    userId: input.userId,
-    metadata: { eventId: event.id, kind: "ticket" },
   });
 
   return { ok: true, order };
@@ -1531,11 +1191,14 @@ export async function setOrderStatus(input: {
   storeId: string;
   status: OrderRow["status"];
 }): Promise<{ ok: boolean; error?: string }> {
+  if (!["pending", "processing", "fulfilled", "cancelled"].includes(input.status)) return { ok: false, error: "Choose a valid fulfilment status." };
   const order = await queryOne<OrderRow>(
     "SELECT * FROM orders WHERE id = ? AND store_id = ?",
     [input.orderId, input.storeId],
   );
   if (!order) return { ok: false, error: "Order not found." };
+  if (input.status === "refunded" || input.status === "paid") return { ok: false, error: "Payment status is updated only after a verified payment or refund." };
+  if (["processing", "fulfilled"].includes(input.status) && order.payment_status !== "paid") return { ok: false, error: "Confirm payment before preparing or completing this order." };
 
   if (input.status === "cancelled" && order.payment_status === "paid") {
     return {
@@ -1560,7 +1223,7 @@ export async function setOrderStatus(input: {
 
   if (input.status === "fulfilled") {
     await execute(
-      "UPDATE order_items SET fulfilment_status = 'fulfilled' WHERE order_id = ? AND item_type != 'digital'",
+      "UPDATE order_items SET fulfilment_status = 'fulfilled' WHERE order_id = ?",
       [input.orderId],
     );
     // One source of truth: a fulfilled order's shipment is closed too, so the
@@ -1575,9 +1238,12 @@ export async function setOrderStatus(input: {
     );
     // Tickets follow their order — an unpaid order's tickets never existed, so
     // this is a no-op there, and a paid one is refused above.
-    await voidTicketsForOrder(input.orderId, "cancelled");
     await cancelShipment(input.orderId, "Order cancelled");
   }
+
+  if (order.user_id && order.status !== input.status) await sendAccountPush(order.user_id, {
+    title: "Rush Cart · Order update", body: `Your order is ${input.status}.`, url: "/orders", tag: `rush-cart:order:${order.id}`,
+  }).catch(() => {});
 
   // A meaningful state change the buyer is waiting on — exactly one email per
   // order whichever code path reaches it (the shipment tracker closes its
@@ -1598,8 +1264,8 @@ export async function setOrderStatus(input: {
 /** How the order reaches its buyer, as the mail speaks of it. */
 function fulfilmentMethodLabel(
   method: OrderRow["fulfilment_method"] | null | undefined,
-): "delivery" | "pickup" | "digital" | "none" {
-  return method === "pickup" || method === "digital" || method === "delivery" ? method : "none";
+): "delivery" | "pickup" | "none" {
+  return method === "pickup" || method === "delivery" ? method : "none";
 }
 
 // --- Payments ---------------------------------------------------------------
@@ -1678,12 +1344,15 @@ export async function verifyAndFulfilPayment(reference: string): Promise<{
   const result = verification.data;
 
   if (result.status !== "success") {
+    if (!["failed", "abandoned", "reversed"].includes(result.status)) {
+      return { ok: false, status: "pending", orderId: payment.order_id, error: "Your payment is still being processed." };
+    }
     await execute(
       `UPDATE payments SET status = 'failed', failure_reason = ?, raw_payload = ?, updated_at = ?
-       WHERE id = ?`,
+       WHERE id = ? AND status != 'success'`,
       [result.gatewayResponse ?? result.status, JSON.stringify(result.raw), nowIso(), payment.id],
     );
-    await execute("UPDATE orders SET payment_status = 'failed', updated_at = ? WHERE id = ?", [
+    await execute("UPDATE orders SET payment_status = 'failed', updated_at = ? WHERE id = ? AND payment_status NOT IN ('paid', 'refunded')", [
       nowIso(),
       payment.order_id,
     ]);
@@ -1695,12 +1364,12 @@ export async function verifyAndFulfilPayment(reference: string): Promise<{
 
   // The verified amount must match what we asked for — a mismatch means someone
   // tampered with the amount, so refuse to fulfil.
-  if (result.amountMinor !== Number(payment.amount)) {
+  if (result.amountMinor !== Number(payment.amount) || result.currency !== payment.currency.toUpperCase() || result.reference !== payment.reference) {
     await execute(
       `UPDATE payments SET status = 'failed', failure_reason = ?, raw_payload = ?, updated_at = ?
-       WHERE id = ?`,
+       WHERE id = ? AND status != 'success'`,
       [
-        `Amount mismatch: expected ${payment.amount}, received ${result.amountMinor}`,
+        `Payment details mismatch: expected ${payment.amount} ${payment.currency}, received ${result.amountMinor} ${result.currency}`,
         JSON.stringify(result.raw),
         nowIso(),
         payment.id,
@@ -1709,26 +1378,10 @@ export async function verifyAndFulfilPayment(reference: string): Promise<{
     return { ok: false, status: "failed", orderId: payment.order_id, error: "Payment amount did not match the order." };
   }
 
-  // Atomic claim — only one caller can move the payment out of a non-success state.
-  const claim = await execute(
-    `UPDATE payments SET status = 'success', paid_at = ?, channel = ?, provider_reference = ?,
-       raw_payload = ?, updated_at = ?
-     WHERE id = ? AND status != 'success'`,
-    [
-      result.paidAt ?? nowIso(),
-      result.channel,
-      result.providerReference,
-      JSON.stringify(result.raw),
-      nowIso(),
-      payment.id,
-    ],
-  );
-
-  if (claim.rowsAffected !== 1) {
-    return { ok: true, status: "already", orderId: payment.order_id };
-  }
-
-  await fulfilOrder(payment.order_id, payment.id);
+  // Payment success and all financial fulfilment commit together. A failed
+  // transaction stays retriable; concurrent callbacks cannot debit stock twice.
+  const fulfilled = await fulfilOrder(payment.order_id, payment.id, result);
+  if (!fulfilled) return { ok: true, status: "already", orderId: payment.order_id };
 
   // Mail comes after fulfilment, never before it: by the time the buyer's inbox
   // says "paid", the order, its tickets and the ledger already say so too. A
@@ -1766,12 +1419,13 @@ export async function deliverSellerMail(orderId: string): Promise<void> {
     const fulfilment =
       order.fulfilment_method === "pickup"
         ? "Pickup"
-        : order.fulfilment_method === "digital"
-          ? "Digital delivery"
           : order.fulfilment_method === "delivery"
             ? `Delivery${order.estimated_delivery ? ` · ${order.estimated_delivery}` : ""}`
             : "No delivery needed";
 
+    const seller = await queryOne<{ user_id: string }>("SELECT user_id FROM stores WHERE id = ?", [order.store_id]);
+    if (seller) await sendAccountPush(seller.user_id, { title: "Rush Cart · New paid order", body: "A new paid order is ready to manage.", url: `/workspace/orders/${encodeURIComponent(order.order_number)}`, tag: `rush-cart:seller-order:${order.id}` }).catch(() => {});
+    if (order.user_id) await sendAccountPush(order.user_id, { title: "Rush Cart · Payment confirmed", body: "Your payment is confirmed. Open Rush Cart to view your order.", url: "/orders", tag: `rush-cart:payment:${order.id}` }).catch(() => {});
     await sendSellerOrderEmail({
       sellerEmail: owner.email,
       sellerName: owner.name,
@@ -1783,7 +1437,6 @@ export async function deliverSellerMail(orderId: string): Promise<void> {
       amountMinor: Number(order.total),
       currency: order.currency,
       fulfilment,
-      isFood: items.length > 0 && items.every((item) => item.item_type === "food"),
     });
   } catch (error) {
     console.error(`[mail] order ${orderId}: seller notice failed`, error);
@@ -1840,13 +1493,7 @@ async function deliverOrderMail(orderId: string): Promise<void> {
   try {
     const outcome = await sendOrderEmails(orderId);
 
-    const note = outcome.invoice.sent
-      ? outcome.tickets?.sent
-        ? "Invoice and tickets emailed"
-        : outcome.tickets
-          ? `Invoice emailed; tickets failed: ${outcome.tickets.error ?? "unknown error"}`
-          : "Invoice emailed"
-      : `Invoice not sent: ${outcome.invoice.error ?? "unknown error"}`;
+    const note = outcome.invoice.sent ? "Invoice emailed" : `Invoice not sent: ${outcome.invoice.error ?? "unknown error"}`;
 
     console.info(`[mail] order ${orderId}: ${note}`);
   } catch (error) {
@@ -1858,13 +1505,26 @@ async function deliverOrderMail(orderId: string): Promise<void> {
  * Post-payment fulfilment: stock, tickets, downloads, customer totals and the
  * money ledger. Runs only after a payment has been claimed.
  */
-async function fulfilOrder(orderId: string, paymentId: string): Promise<void> {
-  const order = await queryOne<OrderRow>("SELECT * FROM orders WHERE id = ?", [orderId]);
-  if (!order) return;
-
-  const items = await listOrderItems(orderId);
-  const timestamp = nowIso();
-  const statements: BatchStatement[] = [];
+async function fulfilOrder(orderId: string, paymentId: string, verified: PaystackVerification): Promise<boolean> {
+  const tx = await db.transaction("write");
+  const txQuery = async <T,>(sql: string, args: Array<string | number> = []): Promise<T | null> =>
+    ((await tx.execute({ sql, args })).rows[0] as unknown as T) ?? null;
+  let order: OrderRow;
+  try {
+    const found = await txQuery<OrderRow>("SELECT * FROM orders WHERE id = ?", [orderId]);
+    if (!found) throw new Error("The order could not be found.");
+    order = found;
+    const claim = await tx.execute({
+      sql: `UPDATE payments SET status = 'success', paid_at = ?, channel = ?, provider_reference = ?, raw_payload = ?, updated_at = ? WHERE id = ? AND status != 'success'`,
+      args: [verified.paidAt ?? nowIso(), verified.channel, verified.providerReference, JSON.stringify(verified.raw), nowIso(), paymentId],
+    });
+    if (claim.rowsAffected !== 1 || order.payment_status === "paid" || order.payment_status === "refunded") {
+      await tx.commit();
+      return false;
+    }
+    const items = (await tx.execute({ sql: "SELECT * FROM order_items WHERE order_id = ? ORDER BY created_at", args: [orderId] })).rows as unknown as OrderItemRow[];
+    const timestamp = nowIso();
+    const statements: BatchStatement[] = [];
 
   statements.push({
     sql: `UPDATE orders SET status = 'paid', payment_status = 'paid', paid_at = ?, updated_at = ?
@@ -1872,80 +1532,22 @@ async function fulfilOrder(orderId: string, paymentId: string): Promise<void> {
     args: [timestamp, timestamp, orderId],
   });
 
-  const ticketCounts = new Map<string, number>();
-
   for (const item of items) {
-    if (item.item_type === "ticket" && item.ticket_type_id && item.event_id) {
-      // One ticket row per attendee, each with its own scannable code.
-      for (let index = 0; index < item.quantity; index += 1) {
-        statements.push({
-          sql: `INSERT INTO tickets
-                  (id, order_id, order_item_id, event_id, ticket_type_id, store_id, code,
-                   holder_name, holder_email, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'valid', ?)`,
-          args: [
-            newId("tix"),
-            orderId,
-            item.id,
-            item.event_id,
-            item.ticket_type_id,
-            order.store_id,
-            `LS-${randomCode(8)}`,
-            order.customer_name,
-            order.email,
-            timestamp,
-          ],
-        });
-      }
-      ticketCounts.set(
-        item.ticket_type_id,
-        (ticketCounts.get(item.ticket_type_id) ?? 0) + item.quantity,
-      );
-      continue;
+    // Remove only the settled quantities from this account's original cart.
+    const metadata = item.metadata ? JSON.parse(item.metadata) as { cartId?: string; cartItemId?: string } : {};
+    if (metadata.cartId && metadata.cartItemId) {
+      statements.push({ sql: `UPDATE cart_items SET quantity = MAX(0, quantity - ?), updated_at = ? WHERE id = ? AND cart_id = ? AND EXISTS (SELECT 1 FROM carts WHERE id = ? AND user_id IS ?)`, args: [item.quantity, timestamp, metadata.cartItemId, metadata.cartId, metadata.cartId, order.user_id] });
+      statements.push({ sql: "DELETE FROM cart_items WHERE id = ? AND cart_id = ? AND quantity = 0", args: [metadata.cartItemId, metadata.cartId] });
+      statements.push({ sql: "UPDATE carts SET status = CASE WHEN EXISTS (SELECT 1 FROM cart_items WHERE cart_id = ?) THEN 'active' ELSE 'converted' END, updated_at = ? WHERE id = ?", args: [metadata.cartId, timestamp, metadata.cartId] });
     }
-
-    if (item.item_type === "digital" && item.listing_id) {
-      const assets = await query<ListingAssetRow>(
-        "SELECT id FROM digital_assets WHERE listing_id = ?",
-        [item.listing_id],
-      );
-
-      for (const asset of assets) {
-        statements.push({
-          sql: `INSERT INTO downloads
-                  (id, order_id, order_item_id, listing_id, asset_id, token, email,
-                   download_count, max_downloads, expires_at, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 0, 10, NULL, ?)`,
-          args: [
-            newId("dl"),
-            orderId,
-            item.id,
-            item.listing_id,
-            asset.id,
-            randomCode(40),
-            order.email,
-            timestamp,
-          ],
-        });
-      }
-
-      statements.push({
-        sql: "UPDATE order_items SET fulfilment_status = 'fulfilled' WHERE id = ?",
-        args: [item.id],
-      });
-      continue;
-    }
-
-    // Physical / food / service lines draw down stock and leave an audit trail.
+    // Product lines draw down stock and leave an audit trail.
     if (item.listing_id) {
-      const listing = await queryOne<ListingRow>("SELECT * FROM listings WHERE id = ?", [
-        item.listing_id,
-      ]);
+      const listing = await txQuery<ListingRow>("SELECT * FROM listings WHERE id = ?", [item.listing_id]);
       if (listing && bool(listing.track_inventory)) {
         if (item.variant_id) {
           // Variant stock alongside its own movement row, so the audit trail
           // records the exact resulting quantity for this option.
-          const variant = await queryOne<{ stock: number }>(
+          const variant = await txQuery<{ stock: number }>(
             "SELECT stock FROM listing_variants WHERE id = ?",
             [item.variant_id],
           );
@@ -2006,26 +1608,16 @@ async function fulfilOrder(orderId: string, paymentId: string): Promise<void> {
     }
   }
 
-  // Ticket inventory is incremented with a guard so it can never oversell.
-  for (const [ticketTypeId, quantity] of ticketCounts) {
-    statements.push({
-      sql: `UPDATE ticket_types
-            SET quantity_sold = quantity_sold + ?
-            WHERE id = ? AND (quantity_total = 0 OR quantity_sold + ? <= quantity_total)`,
-      args: [quantity, ticketTypeId, quantity],
-    });
-  }
-
   // Ledger: a sale credit and the platform fee debit, keeping a running balance.
-  const balanceRow = await queryOne<{ balance: number }>(
+  const balanceRow = await txQuery<{ balance: number }>(
     `SELECT COALESCE(SUM(CASE WHEN direction = 'credit' THEN amount ELSE -amount END), 0) AS balance
      FROM transactions WHERE store_id = ?`,
     [order.store_id],
   );
   const currentBalance = Number(balanceRow?.balance ?? 0);
   const fee = percentOf(Number(order.total), platformConfig.feePercent);
-  const saleNet = Number(order.total) - fee;
-  const balanceAfterSale = currentBalance + saleNet;
+  const saleGross = Number(order.total);
+  const balanceAfterSale = currentBalance + saleGross - fee;
 
   statements.push({
     sql: `INSERT INTO transactions
@@ -2037,9 +1629,9 @@ async function fulfilOrder(orderId: string, paymentId: string): Promise<void> {
       order.store_id,
       orderId,
       paymentId,
-      saleNet,
+      saleGross,
       order.currency,
-      balanceAfterSale,
+      currentBalance + saleGross,
       `Sale ${order.order_number}`,
       order.order_number,
       timestamp,
@@ -2088,7 +1680,16 @@ async function fulfilOrder(orderId: string, paymentId: string): Promise<void> {
     });
   }
 
-  await batch(statements);
+    for (const statement of statements) {
+      await tx.execute({ sql: statement.sql, args: statement.args ?? [] });
+    }
+    await tx.commit();
+  } catch (error) {
+    await tx.rollback();
+    throw error;
+  } finally {
+    tx.close();
+  }
 
   // The fulfilment record opens the moment the money lands, so the buyer's
   // tracking timeline starts from facts the platform recorded before the seller
@@ -2125,6 +1726,7 @@ async function fulfilOrder(orderId: string, paymentId: string): Promise<void> {
     userId: order.user_id,
     metadata: { orderId, total: Number(order.total), currency: order.currency },
   });
+  return true;
 }
 
 /** The stored shipping address JSON, as one readable line where possible. */
@@ -2153,7 +1755,7 @@ async function restoreStockForOrder(orderId: string, reason: "return" | "cancell
   const statements: BatchStatement[] = [];
 
   for (const item of items) {
-    if (item.item_type === "ticket" || item.item_type === "digital" || !item.listing_id) continue;
+    if (item.item_type !== "product" || !item.listing_id) continue;
 
     const listing = await queryOne<ListingRow>("SELECT * FROM listings WHERE id = ?", [
       item.listing_id,
@@ -2280,7 +1882,6 @@ export async function refundOrder(input: {
   );
 
   // Everything the sale created follows it back out.
-  await voidTicketsForOrder(order.id, "refunded");
   await cancelShipment(order.id, "Order refunded");
   await restoreStockForOrder(order.id, "return");
 
@@ -2321,300 +1922,7 @@ export async function refundOrder(input: {
 
   return {
     ok: true,
-    message: `Refund submitted to Paystack for ${order.order_number}. The order is closed and its tickets are void.`,
+    message: `Refund submitted to Paystack for ${order.order_number}. The order is closed.`,
   };
 }
 
-type ListingAssetRow = Pick<DigitalAssetRow, "id">;
-
-// --- Digital downloads ------------------------------------------------------
-
-export async function listDownloadsForOrder(orderId: string): Promise<DownloadRow[]> {
-  return query<DownloadRow>("SELECT * FROM downloads WHERE order_id = ? ORDER BY created_at ASC", [
-    orderId,
-  ]);
-}
-
-/**
- * Resolve a download grant by its token.
- *
- * The token is the only credential required, which is what makes it safe to
- * email a customer a link: it is long, random and scoped to one file.
- */
-export async function getDownloadGrant(token: string): Promise<
-  | (DownloadRow & {
-      listing_title: string;
-      item_title: string;
-      store_name: string;
-      order_number: string;
-    })
-  | null
-> {
-  if (!token || token.length < 20) return null;
-
-  return queryOne(
-    `SELECT d.*, l.title AS listing_title, oi.title AS item_title,
-            s.name AS store_name, o.order_number
-     FROM downloads d
-     JOIN listings l ON l.id = d.listing_id
-     JOIN order_items oi ON oi.id = d.order_item_id
-     JOIN orders o ON o.id = d.order_id
-     JOIN stores s ON s.id = o.store_id
-     WHERE d.token = ?`,
-    [token],
-  );
-}
-
-/**
- * Record a download and return the asset key to stream.
- * Refuses once the grant has expired or hit its download limit.
- */
-export async function consumeDownload(
-  token: string,
-): Promise<
-  | { ok: true; key: string; fileName: string; contentType: string | null }
-  | { ok: false; error: string }
-> {
-  const grant = await queryOne<DownloadRow & { storage_key: string; file_name: string; content_type: string | null }>(
-    `SELECT d.*, a.storage_key, a.file_name, a.content_type
-     FROM downloads d
-     LEFT JOIN digital_assets a ON a.id = d.asset_id
-     WHERE d.token = ?`,
-    [token],
-  );
-
-  if (!grant) return { ok: false, error: "That download link is not valid." };
-
-  if (grant.expires_at && new Date(grant.expires_at).getTime() < Date.now()) {
-    return { ok: false, error: "That download link has expired." };
-  }
-
-  if (grant.download_count >= grant.max_downloads) {
-    return { ok: false, error: "This download has reached its limit." };
-  }
-
-  if (!grant.storage_key) {
-    return { ok: false, error: "The seller has not attached a file to this product yet." };
-  }
-
-  await execute(
-    "UPDATE downloads SET download_count = download_count + 1, last_downloaded_at = ? WHERE id = ?",
-    [nowIso(), grant.id],
-  );
-
-  return {
-    ok: true,
-    key: grant.storage_key,
-    fileName: grant.file_name,
-    contentType: grant.content_type,
-  };
-}
-
-// --- Tickets ----------------------------------------------------------------
-
-/**
- * The ticket columns every ticket view needs, with the event it opens folded
- * in — a ticket without its event is meaningless to a holder or to a door.
- */
-const TICKET_SELECT = `SELECT t.*,
-         e.title AS event_title, e.slug AS event_slug, e.starts_at AS event_starts_at,
-         e.ends_at AS event_ends_at, e.venue_name AS event_venue, e.city AS event_city,
-         e.is_online AS event_online,
-         tt.name AS ticket_type_name,
-         o.order_number AS order_number, o.currency AS order_currency
-   FROM tickets t
-   LEFT JOIN events e ON e.id = t.event_id
-   LEFT JOIN ticket_types tt ON tt.id = t.ticket_type_id
-   LEFT JOIN orders o ON o.id = t.order_id`;
-
-export async function listTicketsForOrder(orderId: string): Promise<TicketWithEvent[]> {
-  return query<TicketWithEvent>(`${TICKET_SELECT} WHERE t.order_id = ? ORDER BY t.created_at ASC`, [
-    orderId,
-  ]);
-}
-
-export async function listTicketsForEvent(eventId: string): Promise<TicketWithEvent[]> {
-  return query<TicketWithEvent>(`${TICKET_SELECT} WHERE t.event_id = ? ORDER BY t.created_at DESC`, [
-    eventId,
-  ]);
-}
-
-/** The most recent arrivals at the door, for the check-in screen. */
-export async function listRecentCheckIns(
-  eventId: string,
-  limit = 8,
-): Promise<TicketWithEvent[]> {
-  return query<TicketWithEvent>(
-    `${TICKET_SELECT} WHERE t.event_id = ? AND t.status = 'used'
-     ORDER BY t.checked_in_at DESC LIMIT ?`,
-    [eventId, limit],
-  );
-}
-
-export type TicketCheckInResult = {
-  ok: boolean;
-  /**
-   * Why a scan failed. `not_found` and `wrong_event` must never reveal more
-   * than they have to — a door scanner is not a lookup service for other
-   * people's tickets.
-   */
-  reason?:
-    | "not_found"
-    | "wrong_event"
-    | "already_used"
-    | "cancelled"
-    | "refunded"
-    | "expired"
-    | "invalid";
-  ticket?: TicketWithEvent;
-  error?: string;
-};
-
-/**
- * Verify and redeem a ticket at the door.
- *
- * This is the only path that can mark a ticket as used, and every check that
- * matters happens here rather than in the browser:
- *
- * 1. the code must exist **and** belong to the store asking (`storeId`);
- * 2. when the caller names an event, the ticket must belong to that event;
- * 3. the ticket must still be `valid` — a used, cancelled, refunded, expired
- *    or void ticket fails, each with its own honest explanation;
- * 4. the redemption itself is a conditional `UPDATE`, so two scanners racing on
- *    the same code cannot both succeed: the loser's update matches no row.
- *
- * The state machine is the database's, not the browser's: `valid → used`
- * happens exactly once, here.
- */
-export async function checkInTicket(input: {
-  code: string;
-  storeId: string;
-  eventId?: string | null;
-}): Promise<TicketCheckInResult> {
-  const code = input.code.trim().toUpperCase();
-  if (!code) return { ok: false, error: "Enter a ticket code." };
-
-  const ticket = await queryOne<TicketWithEvent>(
-    `${TICKET_SELECT} WHERE t.code = ? AND t.store_id = ?`,
-    [code, input.storeId],
-  );
-
-  if (!ticket) return { ok: false, reason: "not_found", error: "No ticket matches that code." };
-
-  if (input.eventId && ticket.event_id !== input.eventId) {
-    return {
-      ok: false,
-      reason: "wrong_event",
-      ticket,
-      error: `That ticket is for ${ticket.event_title ?? "another event"}, not this one.`,
-    };
-  }
-
-  if (ticket.status === "used") {
-    return {
-      ok: false,
-      reason: "already_used",
-      ticket,
-      error: ticket.checked_in_at
-        ? `This ticket was already used. Admitted ${formatDateTimeForDoor(ticket.checked_in_at)}.`
-        : "This ticket was already used.",
-    };
-  }
-
-  if (ticket.status === "cancelled") {
-    return {
-      ok: false,
-      reason: "cancelled",
-      ticket,
-      error: "This ticket was cancelled and cannot be admitted.",
-    };
-  }
-
-  if (ticket.status === "refunded") {
-    return {
-      ok: false,
-      reason: "refunded",
-      ticket,
-      error: "This ticket was refunded and cannot be admitted.",
-    };
-  }
-
-  if (ticket.status === "expired") {
-    return {
-      ok: false,
-      reason: "expired",
-      ticket,
-      error: "This ticket has expired.",
-    };
-  }
-
-  if (ticket.status !== "valid") {
-    return {
-      ok: false,
-      reason: "invalid",
-      ticket,
-      error: "This ticket is not valid for entry.",
-    };
-  }
-
-  // A ticket for a finished event is expired, and the database says so — the
-  // state is written only here, at the door, never guessed in advance.
-  const eventEnd = ticket.event_ends_at ?? ticket.event_starts_at;
-  if (eventEnd && nowIso() > eventEnd) {
-    await execute("UPDATE tickets SET status = 'expired' WHERE id = ? AND status = 'valid'", [
-      ticket.id,
-    ]);
-    return {
-      ok: false,
-      reason: "expired",
-      ticket: { ...ticket, status: "expired" },
-      error: "This event has ended, so the ticket is no longer valid for entry.",
-    };
-  }
-
-  const usedAt = nowIso();
-  const redeemed = await execute(
-    `UPDATE tickets SET status = 'used', checked_in_at = ?
-     WHERE id = ? AND status = 'valid'`,
-    [usedAt, ticket.id],
-  );
-
-  if (redeemed.rowsAffected !== 1) {
-    // Another scanner won the race for the same single admission.
-    return {
-      ok: false,
-      reason: "already_used",
-      ticket,
-      error: "This ticket was just used by another device.",
-    };
-  }
-
-  return {
-    ok: true,
-    ticket: { ...ticket, status: "used", checked_in_at: usedAt },
-  };
-}
-
-/** Timestamps at the door are read at a glance, not parsed. */
-function formatDateTimeForDoor(iso: string): string {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
-}
-
-/**
- * Void every ticket on an order, in one state.
- *
- * Called when an order is cancelled (`cancelled`) or refunded (`refunded`): a
- * ticket follows its order, so a ticket whose purchase no longer stands can
- * never be admitted. Tickets already used at the door keep their state — the
- * person was let in, and history does not un-happen.
- */
-export async function voidTicketsForOrder(
-  orderId: string,
-  status: "cancelled" | "refunded",
-): Promise<void> {
-  await execute(
-    `UPDATE tickets SET status = ? WHERE order_id = ? AND status IN ('valid', 'expired')`,
-    [status, orderId],
-  );
-}

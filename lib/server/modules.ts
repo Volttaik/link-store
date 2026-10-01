@@ -161,7 +161,7 @@ function attributeFiltersFor(
 
 /** Whether anything at all is narrowing the shelf. */
 function anyActive(module: WorkspaceModule, params: ModuleSearchParams, sort: string): boolean {
-  if (param(params, "q").trim()) return true;
+  if (param(params, "q").trim() || param(params, "category").trim()) return true;
   if (sort !== "newest") return true;
   for (const filter of module.filters) {
     if (param(params, filter.param).trim()) return true;
@@ -180,7 +180,7 @@ export async function loadModuleShelf(
   // The module's own branch of the tree — the products branch on the Listing
   // page, the food branch on Food — never the whole catalogue.
   const tree = await listCategoryTree(storeId, module.categoryKind);
-  const requestedCategory = param(params, "cat");
+  const requestedCategory = param(params, "cat") || param(params, "category");
   const known = flattenCategoryTree(tree).some((node) => node.id === requestedCategory);
   const categoryIds =
     known && requestedCategory ? await categorySubtreeIdList(requestedCategory) : undefined;

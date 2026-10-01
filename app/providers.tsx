@@ -3,6 +3,7 @@
 import { ThemeProvider } from "next-themes";
 import type { ReactNode } from "react";
 
+import { PrivacyPreferences } from "@/components/layout/PrivacyPreferences";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 
 /**
@@ -29,7 +30,7 @@ export function Providers({
       enableSystem
       disableTransitionOnChange
     >
-      <AuthProvider googleEnabled={googleEnabled}>{children}</AuthProvider>
+      <AuthProvider googleEnabled={googleEnabled}>{children}<PrivacyPreferences /></AuthProvider>
     </ThemeProvider>
   );
 }

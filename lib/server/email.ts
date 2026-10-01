@@ -5,7 +5,7 @@
  * needed to turn mail on is `RESEND_API_KEY`. Everything is composed here from
  * real rows: an invoice is the order's own items and totals, a ticket email is
  * the buyer's own tickets with their own scannable codes. Every message wears
- * the LINK STORE shell from `lib/server/email-templates.ts` — the LINK ICON
+ * the Rush Cart shell from `lib/server/email-templates.ts` — the LINK ICON
  * mark, one strong hierarchy, one clear action, a professional footer.
  *
  * Sending never throws into a fulfilment path. A failed email is reported back
@@ -15,16 +15,18 @@
 
 import "server-only";
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { createHash } from "node:crypto";
+import { emailSafetyError, escapeEmailHtml, isProductionEmailUrl } from "../email-safety";
 
-import QRCode from "qrcode";
 
 import {
   brandShell,
   brandText,
   emailButton,
   emailCode,
+  emailItemsTable,
   emailLink,
   emailParagraph,
   emailPanel,
@@ -35,7 +37,7 @@ import { isEmailConfigured, platformConfig, resendConfig } from "../env";
 import { formatDateTime, nowIso } from "../format";
 import { newId } from "../ids";
 import { formatMoney } from "../money";
-import type { OrderItemRow, OrderRow, TicketRow } from "../types";
+import type { OrderItemRow, OrderRow } from "../types";
 
 export type EmailResult =
   | { ok: true; id: string; duplicate?: boolean }
@@ -44,7 +46,6 @@ export type EmailResult =
 /** What an email *is*, so its outcome can be read back per order. */
 export type EmailKind =
   | "invoice"
-  | "tickets"
   | "update"
   | "test"
   | "auth"
@@ -61,7 +62,6 @@ export type EmailKind =
   | "order-completed"
   | "order-cancelled"
   | "payout"
-  | "event-update"
   | "message";
 
 export type EmailDeliveryRow = {
@@ -200,29 +200,50 @@ async function deliverEmail(input: {
   html: string;
   text: string;
   replyTo?: string | null;
+  meta?: EmailMeta;
 }): Promise<EmailResult> {
   if (!isEmailConfigured) {
     return { ok: false, error: "Email is not configured.", skipped: true };
   }
 
-  if (!input.to.includes("@")) {
+  const safetyError = emailSafetyError(input, platformConfig.appUrl);
+  if (safetyError) return { ok: false, error: safetyError };
+  if (!resendConfig.from || /[\r\n]/.test(resendConfig.from) || /@resend\.dev\b/i.test(resendConfig.from)) {
+    return { ok: false, error: "Configure an authenticated sender address before sending email." };
+  }
+
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(input.to)) {
     return { ok: false, error: "That address is not a valid email." };
   }
 
+  const replyTo = input.replyTo || resendConfig.replyTo;
+  if (replyTo && !/^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/.test(replyTo)) return { ok: false, error: "The reply address is not valid." };
   try {
     const response = await fetch("https://api.resend.com/emails", {
+      signal: AbortSignal.timeout(15000),
       method: "POST",
       headers: {
         Authorization: `Bearer ${resendConfig.apiKey}`,
         "Content-Type": "application/json",
+        ...(input.meta?.dedupeKey ? { "Idempotency-Key": `rush-cart/${createHash("sha256").update(input.meta.dedupeKey).digest("hex")}` } : {}),
       },
       body: JSON.stringify({
         from: resendConfig.from,
+        // The logo rides inside the message itself. `content_type` is stated
+        // explicitly on purpose: the provider would otherwise treat the part
+        // as `application/octet-stream`, and clients then refuse to render the
+        // `cid:` reference — the logo "sent" but never appeared.
+        attachments: [{
+          filename: "rush-cart-logo.png",
+          content: (await readFile(path.join(process.cwd(), "public/brand/rush-cart-logo.png"))).toString("base64"),
+          content_type: "image/png",
+          content_id: "rush-cart-logo",
+        }],
         to: [input.to],
         subject: input.subject,
         html: input.html,
         text: input.text,
-        ...(input.replyTo ? { reply_to: input.replyTo } : {}),
+        ...((input.replyTo || resendConfig.replyTo) ? { reply_to: input.replyTo || resendConfig.replyTo } : {}),
       }),
     });
 
@@ -234,15 +255,15 @@ async function deliverEmail(input: {
     if (!response.ok) {
       return {
         ok: false,
-        error: payload?.message ?? `The mail service rejected the message (${response.status}).`,
+        error: "The email could not be delivered. Please try again later.",
       };
     }
 
     return { ok: true, id: payload?.id ?? "" };
-  } catch (error) {
+  } catch {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "The email could not be sent.",
+      error: "The email could not be sent. Please try again later.",
     };
   }
 }
@@ -260,33 +281,18 @@ export type InvoiceOutcome = {
  * email speaks the vocabulary of the thing that happened, never a generic
  * warehouse voice over every kind of commerce.
  */
-function orderTone(order: OrderRow, items: OrderItemRow[]): {
+function orderTone(order: OrderRow): {
   subject: (orderNumber: string) => string;
   title: string;
   noun: string;
 } {
   const chat = order.source === "chat";
-  const types = new Set(items.map((item) => item.item_type));
 
   if (chat) {
     return {
       subject: (n) => `Your payment was successful · ${n}`,
       title: "Payment received",
       noun: "payment",
-    };
-  }
-  if (types.size === 1 && types.has("food")) {
-    return {
-      subject: (n) => `Your food order is confirmed · ${n}`,
-      title: "Your food order is confirmed",
-      noun: "food order",
-    };
-  }
-  if (types.size === 1 && types.has("service")) {
-    return {
-      subject: (n) => `Your service order is confirmed · ${n}`,
-      title: "Your service order is confirmed",
-      noun: "service order",
     };
   }
   return {
@@ -303,7 +309,7 @@ async function orderItemImage(item: OrderItemRow): Promise<string | null> {
     `SELECT image_url FROM listing_images WHERE listing_id = ? ORDER BY position ASC, created_at ASC LIMIT 1`,
     [item.listing_id],
   );
-  return row?.image_url ?? null;
+  return row?.image_url && isProductionEmailUrl(row.image_url) ? row.image_url : null;
 }
 
 /**
@@ -315,9 +321,14 @@ async function orderItemImage(item: OrderItemRow): Promise<string | null> {
  * page where the buyer can follow its status. The wording follows what was
  * actually bought — a food order reads like a food order.
  */
+function readableShippingAddress(value: string): string {
+  try { const parsed = JSON.parse(value); return Object.values(parsed).filter(value => typeof value === "string" && value.trim()).join("\n"); } catch { return value; }
+}
+
 export async function sendOrderInvoice(orderId: string): Promise<InvoiceOutcome> {
   const order = await queryOne<OrderRow>("SELECT * FROM orders WHERE id = ?", [orderId]);
   if (!order) return { sent: false, error: "That order does not exist." };
+  if (order.payment_status !== "paid") return { sent: false, error: "A receipt is available after payment is confirmed." };
 
   const items = await query<OrderItemRow>(
     "SELECT * FROM order_items WHERE order_id = ? ORDER BY created_at ASC",
@@ -331,34 +342,21 @@ export async function sendOrderInvoice(orderId: string): Promise<InvoiceOutcome>
 
   const currency = order.currency;
   const money = (amount: number) => formatMoney(amount, currency);
-  const tone = orderTone(order, items);
+  const tone = orderTone(order);
 
-  // Each bought line, photo first when there is one — a compact item block per
-  // line, not a table row, so long product names wrap instead of scrolling.
-  const itemBlocks = await Promise.all(
-    items.map(async (item) => {
-      const image = await orderItemImage(item);
-      return emailPanel(`
-        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse">
-          <tr>
-            ${
-              image
-                ? `<td width="64" style="padding-right:14px;vertical-align:top">
-                    <img alt="" height="56" src="${image}" style="display:block;border-radius:8px;object-fit:cover" width="56" />
-                  </td>`
-                : ""
-            }
-            <td style="vertical-align:top;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;word-break:break-word">
-              <p style="margin:0 0 2px;font-size:14px;font-weight:600;color:#1f1d2d">${item.title}${item.variant_name ? ` (${item.variant_name})` : ""}</p>
-              <p style="margin:0;font-size:13px;color:#6e6b82">${item.quantity} × ${money(Number(item.unit_price))}</p>
-            </td>
-            <td style="vertical-align:top;text-align:right;font-size:14px;font-weight:600;color:#1f1d2d;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif">
-              ${money(item.total)}
-            </td>
-          </tr>
-        </table>
-      `);
-    }),
+  // Each bought line as a real invoice row: photo, name, quantity, unit price
+  // and the line total in its own column. Long names wrap; money never moves.
+  const itemRows = await Promise.all(
+    items.map(async (item) => ({
+      title: item.title,
+      detail: [item.variant_name, `${item.quantity} × ${money(Number(item.unit_price))}`]
+        .filter(Boolean)
+        .join(" · "),
+      image: await orderItemImage(item),
+      quantity: item.quantity,
+      unitPrice: money(Number(item.unit_price)),
+      amount: money(item.total),
+    })),
   );
 
   const totals = [
@@ -378,6 +376,7 @@ export async function sendOrderInvoice(orderId: string): Promise<InvoiceOutcome>
 
   const facts = [
     { label: "Order", value: order.order_number },
+    { label: "Order date", value: formatDateTime(order.created_at) },
     { label: "Payment", value: `Paid${order.paid_at ? ` · ${formatDateTime(order.paid_at)}` : ""}` },
     { label: "Seller", value: store?.name ?? "The seller" },
     ...(order.fulfilment_method === "pickup"
@@ -399,20 +398,27 @@ export async function sendOrderInvoice(orderId: string): Promise<InvoiceOutcome>
     preheader: `${money(order.total)} paid to ${store?.name ?? "the seller"}. Your receipt and order details are inside.`,
     body: [
       emailParagraph(
-        `Thanks${order.customer_name ? `, ${order.customer_name}` : ""}. Your ${tone.noun} from <strong>${store?.name ?? "the seller"}</strong> is confirmed and paid.`,
+        `Thanks${order.customer_name ? `, ${escapeEmailHtml(order.customer_name)}` : ""}. Your ${tone.noun} from <strong>${escapeEmailHtml(store?.name ?? "the seller")}</strong> is confirmed and paid.`,
       ),
-      ...itemBlocks,
-      emailRows(totals),
       emailRows(facts),
+      ...(order.customer_name || order.email
+        ? [
+            emailRows([
+              { label: "Billed to", value: [order.customer_name, order.email].filter(Boolean).join(" · ") },
+            ]),
+          ]
+        : []),
+      emailItemsTable(itemRows),
+      emailRows(totals),
       order.shipping_address
         ? emailParagraph(
-            `<strong>Delivering to</strong><br>${order.shipping_address.replace(/\n/g, "<br>")}`,
+            `<strong>Delivering to</strong><br>${escapeEmailHtml(readableShippingAddress(order.shipping_address)).replace(/\n/g, "<br>")}`,
           )
         : "",
       emailButton("View your order", orderUrl),
       store
         ? emailParagraph(
-            `Bought from <a href="${platformConfig.appUrl}/@${store.slug}" style="color:#554695">${store.name}</a>.`,
+            `Bought from <a href="${platformConfig.appUrl}/@${store.slug}" style="color:#554695">${escapeEmailHtml(store.name)}</a>.`,
           )
         : "",
     ].join(""),
@@ -424,7 +430,7 @@ export async function sendOrderInvoice(orderId: string): Promise<InvoiceOutcome>
     "",
     ...items.map(
       (item) =>
-        `${item.title}${item.variant_name ? ` (${item.variant_name})` : ""} × ${item.quantity}, ${money(item.total)}`,
+        `${item.title}${item.variant_name ? ` (${item.variant_name})` : ""} × ${item.quantity} @ ${money(Number(item.unit_price))} = ${money(item.total)}`,
     ),
     "",
     `Subtotal: ${money(order.subtotal)}`,
@@ -446,120 +452,7 @@ export async function sendOrderInvoice(orderId: string): Promise<InvoiceOutcome>
   return result.ok ? { sent: true } : { sent: false, error: result.error, skipped: result.skipped };
 }
 
-/** QR code for a ticket, as a data URL, generated from the ticket's own code. */
-async function ticketQr(code: string): Promise<string | null> {
-  try {
-    return await QRCode.toDataURL(code, { margin: 1, width: 220 });
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Tickets for a paid order.
- *
- * Each attendee gets their own code and their own QR image, because each is
- * checked in independently. The code is also printed as text so a ticket still
- * works if the image will not load or the email is read as plain text.
- */
-export async function sendTicketDelivery(orderId: string): Promise<InvoiceOutcome> {
-  const order = await queryOne<OrderRow>("SELECT * FROM orders WHERE id = ?", [orderId]);
-  if (!order) return { sent: false, error: "That order does not exist." };
-
-  const tickets = await query<TicketRow & { event_title: string | null; event_starts_at: string | null; event_venue: string | null; event_city: string | null; ticket_type_name: string | null }>(
-    `SELECT t.*, e.title AS event_title, e.starts_at AS event_starts_at, e.venue_name AS event_venue, e.city AS event_city,
-            tt.name AS ticket_type_name
-       FROM tickets t
-       LEFT JOIN events e ON e.id = t.event_id
-       LEFT JOIN ticket_types tt ON tt.id = t.ticket_type_id
-      WHERE t.order_id = ?
-      ORDER BY t.created_at ASC`,
-    [orderId],
-  );
-
-  if (tickets.length === 0) return { sent: false, error: "This order has no tickets." };
-
-  const first = tickets[0];
-  const ticketBlocks = await Promise.all(
-    tickets.map(async (ticket, index) => {
-      const qr = await ticketQr(ticket.code);
-
-      return emailPanel(`
-        <p style="margin:0 0 2px;font-size:16px;font-weight:700;color:#1f1d2d;font-family:${"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif"}">${ticket.event_title ?? "Your ticket"}</p>
-        <p style="margin:0 0 12px;font-size:13px;color:#6e6b82">
-          ${ticket.ticket_type_name ?? "Ticket"}${ticket.holder_name ? ` · ${ticket.holder_name}` : ""} · Ticket ${index + 1} of ${tickets.length}
-        </p>
-        ${
-          ticket.event_starts_at
-            ? `<p style="margin:0 0 4px;font-size:13px;color:#3f3d52">${formatDateTime(ticket.event_starts_at)}</p>`
-            : ""
-        }
-        ${
-          ticket.event_venue || ticket.event_city
-            ? `<p style="margin:0 0 12px;font-size:13px;color:#3f3d52">${[ticket.event_venue, ticket.event_city].filter(Boolean).join(", ")}</p>`
-            : ""
-        }
-        ${
-          qr
-            ? `<img alt="Ticket ${ticket.code}" height="180" src="${qr}" style="display:block;border-radius:10px" width="180" />`
-            : ""
-        }
-        <p style="margin:12px 0 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:15px;font-weight:700;letter-spacing:.08em;color:#1f1d2d">${ticket.code}</p>
-        <p style="margin:4px 0 0;font-size:12px;color:#6e6b82">Show this at the door. The code is also what a scanner reads.</p>
-      `);
-    }),
-  );
-
-  const html = brandShell({
-    title: `Your tickets · ${first.event_title ?? order.order_number}`,
-    preheader: `${tickets.length} ticket${tickets.length === 1 ? "" : "s"}, each with its own scannable code.`,
-    body: [
-      emailParagraph(
-        `${tickets.length} ticket${tickets.length === 1 ? "" : "s"} for ${order.customer_name ?? order.email}. Each one has its own code and is checked in separately.`,
-      ),
-      ...ticketBlocks,
-    ].join(""),
-  });
-
-  const text = brandText([
-    `Your tickets · ${first.event_title ?? order.order_number}`,
-    "",
-    ...tickets.map((ticket, index) => `${index + 1}. ${ticket.code} · ${ticket.ticket_type_name ?? "Ticket"}`),
-  ]);
-
-  const result = await sendEmail({
-    to: order.email,
-    subject: `Your tickets · ${first.event_title ?? order.order_number}`,
-    html,
-    text,
-    meta: { orderId: order.id, storeId: order.store_id, kind: "tickets" },
-  });
-
-  return result.ok ? { sent: true } : { sent: false, error: result.error, skipped: result.skipped };
-}
-
-/**
- * Everything a paid order owes the buyer by email.
- *
- * Called after fulfilment, never before it: the order exists, tickets exist and
- * the money is claimed, so the mail describes something that has already
- * happened.
- */
-export async function sendOrderEmails(orderId: string): Promise<{
-  invoice: InvoiceOutcome;
-  tickets: InvoiceOutcome | null;
-}> {
-  const invoice = await sendOrderInvoice(orderId);
-  const ticketCount = await queryOne<{ total: number }>(
-    "SELECT COUNT(*) AS total FROM tickets WHERE order_id = ?",
-    [orderId],
-  );
-
-  const tickets =
-    (ticketCount?.total ?? 0) > 0 ? await sendTicketDelivery(orderId) : null;
-
-  return { invoice, tickets };
-}
+export async function sendOrderEmails(orderId: string): Promise<{ invoice: InvoiceOutcome }> { return { invoice: await sendOrderInvoice(orderId) }; }
 
 /**
  * What was emailed for an order, newest first.
@@ -610,10 +503,10 @@ export async function sendShipmentUpdateEmail(input: {
       preheader: `Your ${input.method === "pickup" ? "order" : "delivery"} update from ${store?.name ?? "the seller"}: ${input.statusLabel}.`,
       body: [
         emailParagraph(
-          `Hi${input.order.customer_name ? ` ${input.order.customer_name}` : ""}. Here is the latest on your order from <strong>${store?.name ?? "the seller"}</strong>.`,
+          `Hi${input.order.customer_name ? ` ${escapeEmailHtml(input.order.customer_name)}` : ""}. Here is the latest on your order from <strong>${escapeEmailHtml(store?.name ?? "the seller")}</strong>.`,
         ),
         emailRows(facts),
-        input.note ? emailPanel(emailParagraph(input.note)) : "",
+        input.note ? emailPanel(emailParagraph(escapeEmailHtml(input.note))) : "",
         emailParagraph(
           "This update was reported by the seller. This platform does not use live GPS tracking. The status above is exactly what the seller recorded.",
         ),
@@ -677,7 +570,7 @@ export async function resendOrderEmails(orderId: string): Promise<{
  * A sign-in code.
  *
  * The authentication engine decides *when* a code is needed and what it is;
- * the mail itself is composed here, in LINK STORE's own shell, so nothing in
+ * the mail itself is composed here, in Rush Cart's own shell, so nothing in
  * the message belongs to the engine that generated it. The code is also
  * printed as text next to the styled block, so it stays readable and copyable
  * in a client that blocks styling.
@@ -704,7 +597,7 @@ export async function sendSignInCodeEmail(input: {
   });
 
   const text = brandText([
-    "Your LINK STORE sign-in code",
+    "Your Rush Cart sign-in code",
     "",
     input.code.split("").join(" "),
     "",
@@ -714,7 +607,7 @@ export async function sendSignInCodeEmail(input: {
 
   return sendEmail({
     to: input.to,
-    subject: `${input.code} is your LINK STORE code`,
+    subject: `${input.code} is your Rush Cart code`,
     html,
     text,
     meta: { kind: "auth" },
@@ -735,22 +628,22 @@ export async function sendWelcomeEmail(input: {
   const workspaceUrl = `${platformConfig.appUrl}/workspace`;
 
   const html = brandShell({
-    title: `Welcome to LINK STORE, ${input.name}`,
+    title: `Welcome to Rush Cart, ${input.name}`,
     preheader: "Your account is ready. Your whole world of selling now lives at one link.",
     body: [
       emailParagraph(
-        `Your account is live, ${input.name}. Everything you sell (products, food, services, events, digital files) now lives at one beautiful address.`,
+        `Your account is live, ${escapeEmailHtml(input.name)}. You can discover products, message sellers and keep track of your orders.`,
       ),
       emailParagraph("Open your workspace to create your storefront and add what you sell."),
       emailButton("Open your workspace", workspaceUrl),
       emailParagraph(
-        "Bought something instead? Every order you place shows up with its receipts, tickets and downloads, with no account archaeology needed.",
+        "Bought something instead? Your orders and receipts stay together in your account.",
       ),
     ].join(""),
   });
 
   const text = brandText([
-    `Welcome to LINK STORE, ${input.name}`,
+    `Welcome to Rush Cart, ${input.name}`,
     "",
     "Your account is live. Open your workspace to create your storefront and add what you sell:",
     workspaceUrl,
@@ -758,7 +651,7 @@ export async function sendWelcomeEmail(input: {
 
   return sendEmail({
     to: input.to,
-    subject: "Welcome to LINK STORE",
+    subject: "Welcome to Rush Cart",
     html,
     text,
     meta: { kind: "welcome" },
@@ -783,10 +676,10 @@ export async function sendPasswordResetEmail(input: {
 
   const html = brandShell({
     title: "Reset your password",
-    preheader: `A password reset was requested for your LINK STORE account. The link expires in ${minutes} minutes.`,
+    preheader: `A password reset was requested for your Rush Cart account. The link expires in ${minutes} minutes.`,
     body: [
       emailParagraph(
-        `Hi ${input.name}, someone asked to reset the password on this LINK STORE account. The link below sets a new one. It works once and expires in ${minutes} minutes.`,
+        `Hi ${escapeEmailHtml(input.name)}, someone asked to reset the password on this Rush Cart account. The link below sets a new one. It works once and expires in ${minutes} minutes.`,
       ),
       emailButton("Choose a new password", input.resetUrl),
       emailLink("Reset your password", input.resetUrl),
@@ -797,7 +690,7 @@ export async function sendPasswordResetEmail(input: {
   });
 
   const text = brandText([
-    "Reset your LINK STORE password",
+    "Reset your Rush Cart password",
     "",
     `Hi ${input.name}, someone asked to reset the password on this account.`,
     `Choose a new password (valid once, ${minutes} minutes):`,
@@ -808,7 +701,7 @@ export async function sendPasswordResetEmail(input: {
 
   return sendEmail({
     to: input.to,
-    subject: "Reset your LINK STORE password",
+    subject: "Reset your Rush Cart password",
     html,
     text,
     meta: { kind: "password-reset" },
@@ -830,10 +723,10 @@ export async function sendPasswordChangedEmail(input: {
 
   const html = brandShell({
     title: "Your password was changed",
-    preheader: "The password on your LINK STORE account was just updated.",
+    preheader: "The password on your Rush Cart account was just updated.",
     body: [
       emailParagraph(
-        `Hi ${input.name}, the password on your LINK STORE account was just changed. Every other signed-in device was signed out.`,
+        `Hi ${escapeEmailHtml(input.name)}, the password on your Rush Cart account was just changed. Your existing sessions were signed out.`,
       ),
       emailParagraph(
         "If this was you, there is nothing to do. If it was not, reset your password immediately from the sign-in screen and review your account.",
@@ -843,15 +736,15 @@ export async function sendPasswordChangedEmail(input: {
   });
 
   const text = brandText([
-    "Your LINK STORE password was changed",
+    "Your Rush Cart password was changed",
     "",
-    `Hi ${input.name}, the password on your account was just changed. Every other signed-in device was signed out.`,
+    `Hi ${input.name}, the password on your account was just changed. Your existing sessions were signed out.`,
     "If this was not you, reset your password immediately from the sign-in screen.",
   ]);
 
   return sendEmail({
     to: input.to,
-    subject: "Your LINK STORE password was changed",
+    subject: "Your Rush Cart password was changed",
     html,
     text,
     meta: { kind: "password-changed" },
@@ -906,7 +799,7 @@ export async function sendPaymentRequestEmail(input: {
     preheader: `${input.sellerName} is requesting ${amount}. Open the conversation to review and pay it.`,
     body: [
       emailParagraph(
-        `Hi${input.buyerName ? ` ${input.buyerName}` : ""}, <strong>${input.sellerName}</strong> sent you a payment request in your conversation.`,
+        `Hi${input.buyerName ? ` ${escapeEmailHtml(input.buyerName)}` : ""}, <strong>${escapeEmailHtml(input.sellerName)}</strong> sent you a payment request in your conversation.`,
       ),
       emailRows(facts),
       emailParagraph(
@@ -963,7 +856,7 @@ export async function sendPaymentRequestCancelledEmail(input: {
     preheader: `${input.sellerName} withdrew the ${amount} payment request. Nothing was charged.`,
     body: [
       emailParagraph(
-        `Hi${input.buyerName ? ` ${input.buyerName}` : ""}, <strong>${input.sellerName}</strong> cancelled the ${amount} payment request from your conversation.`,
+        `Hi${input.buyerName ? ` ${escapeEmailHtml(input.buyerName)}` : ""}, <strong>${escapeEmailHtml(input.sellerName)}</strong> cancelled the ${amount} payment request from your conversation.`,
       ),
       emailParagraph("Nothing was charged. If you still want to go ahead, reply in the conversation."),
       emailButton("Open the conversation", conversationUrl),
@@ -1022,7 +915,7 @@ export async function sendPaymentReceivedEmail(input: {
     preheader: `${amount} has been paid${input.buyerName ? ` by ${input.buyerName}` : ""}.`,
     body: [
       emailParagraph(
-        `Hi${input.sellerName ? ` ${input.sellerName}` : ""}, the payment request in your conversation has been paid in full.`,
+        `Hi${input.sellerName ? ` ${escapeEmailHtml(input.sellerName)}` : ""}, the payment request in your conversation has been paid in full.`,
       ),
       emailRows(facts),
       emailParagraph(
@@ -1081,10 +974,10 @@ export async function sendPaymentFailedEmail(input: {
 
   const html = brandShell({
     title: "Your payment did not go through",
-    preheader: `${amount} for ${input.orderNumber} was not successful. Nothing has been delivered or charged.`,
+    preheader: `${amount} for ${input.orderNumber} was not successful. Your order is not confirmed. Contact your bank if you see a pending debit.`,
     body: [
       emailParagraph(
-        `Hi${input.name ? ` ${input.name}` : ""}, the payment of <strong>${amount}</strong> for ${input.orderNumber} was not successful, so the order has not been paid.`,
+        `Hi${input.name ? ` ${escapeEmailHtml(input.name)}` : ""}, the payment of <strong>${amount}</strong> for ${escapeEmailHtml(input.orderNumber)} was not successful, so the order has not been paid.`,
       ),
       emailRows([
         { label: "Order", value: input.orderNumber },
@@ -1093,7 +986,7 @@ export async function sendPaymentFailedEmail(input: {
         ...(input.reason ? [{ label: "Reason", value: input.reason }] : []),
       ]),
       emailParagraph(
-        "You can try again from your order — nothing has been delivered, and no ticket has been issued.",
+        "You can try again from your order — your order has not been confirmed.",
       ),
       emailButton("Try again", input.ctaUrl),
     ].join(""),
@@ -1141,10 +1034,10 @@ export async function sendSellerOrderEmail(input: {
   amountMinor: number;
   currency: string;
   fulfilment: string;
-  isFood: boolean;
 }): Promise<EmailResult> {
   const amount = formatMoney(input.amountMinor, input.currency);
-  const orderUrl = `${platformConfig.appUrl}/workspace/orders/${input.orderId}`;
+  // Linked by the human order number — no internal identifiers travel by mail.
+  const orderUrl = `${platformConfig.appUrl}/workspace/orders/${encodeURIComponent(input.orderNumber)}`;
 
   const facts = [
     { label: "Order", value: input.orderNumber },
@@ -1156,11 +1049,11 @@ export async function sendSellerOrderEmail(input: {
   ];
 
   const html = brandShell({
-    title: input.isFood ? "New food order" : "New order",
+    title: "New order",
     preheader: `${input.orderNumber} · ${amount}, paid and waiting for you.`,
     body: [
       emailParagraph(
-        `Hi${input.sellerName ? ` ${input.sellerName}` : ""}, you have a new paid ${input.isFood ? "food " : ""}order. The payment has been verified.`,
+        `Hi${input.sellerName ? ` ${escapeEmailHtml(input.sellerName)}` : ""}, you have a new paid order. The payment has been verified.`,
       ),
       emailRows(facts),
       emailButton("Open the order", orderUrl),
@@ -1169,7 +1062,7 @@ export async function sendSellerOrderEmail(input: {
   });
 
   const text = brandText([
-    input.isFood ? "New food order" : "New order",
+    "New order",
     "",
     `Order: ${input.orderNumber}`,
     `Customer: ${input.customerName ?? "A customer"}`,
@@ -1182,9 +1075,7 @@ export async function sendSellerOrderEmail(input: {
 
   return sendEmail({
     to: input.sellerEmail,
-    subject: input.isFood
-      ? `New food order · ${input.orderNumber}`
-      : `New order · ${input.orderNumber}`,
+    subject: `New order · ${input.orderNumber}`,
     html,
     text,
     meta: {
@@ -1204,7 +1095,7 @@ export async function sendSellerOrderEmail(input: {
  */
 export async function sendOrderCompletedEmail(input: {
   order: Pick<OrderRow, "id" | "email" | "order_number" | "access_token" | "store_id" | "customer_name" | "total" | "currency">;
-  method: "delivery" | "pickup" | "digital" | "none";
+  method: "delivery" | "pickup" | "none";
   at: string;
 }): Promise<void> {
   try {
@@ -1214,19 +1105,14 @@ export async function sendOrderCompletedEmail(input: {
     const orderUrl = `${platformConfig.appUrl}/orders/${input.order.access_token}`;
     const money = formatMoney(Number(input.order.total), input.order.currency);
 
-    const closing =
-      input.method === "pickup"
-        ? "This order has been picked up."
-        : input.method === "digital"
-          ? "Your downloads for this order are available."
-          : "This order has been delivered.";
+    const closing = input.method === "pickup" ? "This order has been picked up." : input.method === "delivery" ? "This order has been delivered." : "Your agreed order has been completed.";
 
     const html = brandShell({
       title: "Your order is completed",
       preheader: `${input.order.order_number} is complete. ${closing}`,
       body: [
         emailParagraph(
-          `Hi${input.order.customer_name ? ` ${input.order.customer_name}` : ""}, good news: your order from <strong>${store?.name ?? "the seller"}</strong> is completed.`,
+          `Hi${input.order.customer_name ? ` ${escapeEmailHtml(input.order.customer_name)}` : ""}, good news: your order from <strong>${escapeEmailHtml(store?.name ?? "the seller")}</strong> is completed.`,
         ),
         emailRows([
           { label: "Order", value: input.order.order_number },
@@ -1237,7 +1123,7 @@ export async function sendOrderCompletedEmail(input: {
         emailParagraph(closing),
         emailButton("View your order", orderUrl),
         emailParagraph(
-          "Something wrong with it? Reply to this email or contact the seller from your order page and they will make it right.",
+          "Something wrong with it? Contact the seller from your order page to discuss a resolution.",
         ),
       ].join(""),
     });
@@ -1290,7 +1176,7 @@ export async function sendOrderCancelledEmail(input: {
       preheader: `${input.order.order_number} has been cancelled. Nothing has been charged.`,
       body: [
         emailParagraph(
-          `Hi${input.order.customer_name ? ` ${input.order.customer_name}` : ""}, your ${input.order.order_number} with <strong>${store?.name ?? "the seller"}</strong> has been cancelled.`,
+          `Hi${input.order.customer_name ? ` ${escapeEmailHtml(input.order.customer_name)}` : ""}, your ${escapeEmailHtml(input.order.order_number)} with <strong>${escapeEmailHtml(store?.name ?? "the seller")}</strong> has been cancelled.`,
         ),
         emailParagraph(
           "Nothing has been charged. If you would like it after all, you can place the order again.",
@@ -1339,26 +1225,26 @@ export async function sendRefundEmails(input: {
     ]);
     const owner = await storeOwnerContact(input.order.store_id);
     const orderUrl = `${platformConfig.appUrl}/orders/${input.order.access_token}`;
-    const workspaceUrl = `${platformConfig.appUrl}/workspace/orders/${input.order.id}`;
+    const workspaceUrl = `${platformConfig.appUrl}/workspace/orders/${encodeURIComponent(input.order.order_number)}`;
     const money = formatMoney(Number(input.order.total), input.order.currency);
 
     await sendEmail({
       to: input.order.email,
       subject: `Your refund is on its way · ${input.order.order_number}`,
       html: brandShell({
-        title: "Your order was refunded",
-        preheader: `${money} for ${input.order.order_number} has been refunded to your payment method.`,
+        title: "Your refund was submitted",
+        preheader: `${money} for ${input.order.order_number} has been submitted for return to your payment method.`,
         body: [
           emailParagraph(
-            `Hi${input.order.customer_name ? ` ${input.order.customer_name}` : ""}, your order with <strong>${store?.name ?? "the seller"}</strong> has been refunded.`,
+            `Hi${input.order.customer_name ? ` ${escapeEmailHtml(input.order.customer_name)}` : ""}, a refund for your order with <strong>${escapeEmailHtml(store?.name ?? "the seller")}</strong> has been accepted for processing.`,
           ),
           emailRows([
             { label: "Order", value: input.order.order_number },
             { label: "Amount refunded", value: money, strong: true },
-            { label: "Status", value: "Refunded" },
+            { label: "Status", value: "Refund submitted" },
           ]),
           emailParagraph(
-            "The money is going back to the payment method you paid with. Your bank controls how quickly it lands — usually a few working days. Any tickets for this order are no longer valid.",
+            "The money is going back to the payment method you paid with. Your bank controls how quickly it lands — usually a few working days.",
           ),
           emailButton("View your order", orderUrl),
         ].join(""),
@@ -1368,7 +1254,7 @@ export async function sendRefundEmails(input: {
         "",
         `Order: ${input.order.order_number}`,
         `Amount refunded: ${money}`,
-        "The money is returning to your payment method. Any tickets for this order are no longer valid.",
+        "The money is returning to your payment method.",
         "",
         `View your order: ${orderUrl}`,
       ]),
@@ -1386,10 +1272,10 @@ export async function sendRefundEmails(input: {
         subject: `Refund issued · ${input.order.order_number}`,
         html: brandShell({
           title: "A refund was issued",
-          preheader: `${money} for ${input.order.order_number} has been returned to the customer.`,
+          preheader: `${money} for ${input.order.order_number} has been submitted for return to the customer.`,
           body: [
             emailParagraph(
-              `Hi${owner.name ? ` ${owner.name}` : ""}, the refund you initiated for ${input.order.order_number} has been accepted by the payment provider.`,
+              `Hi${owner.name ? ` ${escapeEmailHtml(owner.name)}` : ""}, the refund you initiated for ${escapeEmailHtml(input.order.order_number)} has been accepted by the payment provider.`,
             ),
             emailRows([
               { label: "Order", value: input.order.order_number },
@@ -1397,7 +1283,7 @@ export async function sendRefundEmails(input: {
               { label: "Customer", value: input.order.customer_name ?? input.order.email },
             ]),
             emailParagraph(
-              "The sale has been reversed in your finance page, net of the platform fee as stated in the policy. Any tickets for this order are void.",
+              "The sale has been reversed in your finance page, net of the platform fee as stated in the policy.",
             ),
             emailButton("Open the order", workspaceUrl),
           ].join(""),
@@ -1454,7 +1340,7 @@ export async function sendPayoutRequestedEmail(input: {
     preheader: `Your payout of ${amount} has been requested and is being reviewed.`,
     body: [
       emailParagraph(
-        `Hi${input.sellerName ? ` ${input.sellerName}` : ""}, your payout request has been recorded.`,
+        `Hi${input.sellerName ? ` ${escapeEmailHtml(input.sellerName)}` : ""}, your payout request has been recorded.`,
       ),
       emailRows([
         { label: "Amount", value: amount, strong: true },
@@ -1501,70 +1387,6 @@ export async function sendPayoutRequestedEmail(input: {
  * message says plainly what changed; it never dresses a cancellation as an
  * update.
  */
-export async function sendEventChangeEmail(input: {
-  to: string;
-  holderName: string | null;
-  eventId: string;
-  eventTitle: string;
-  eventUrl: string;
-  changeLine: string;
-  detailLines: Array<{ label: string; value: string }>;
-  cancelled: boolean;
-  changedAt: string;
-}): Promise<EmailResult> {
-  const html = brandShell({
-    title: input.cancelled ? `${input.eventTitle} has been cancelled` : `${input.eventTitle} has changed`,
-    preheader: input.changeLine,
-    body: [
-      emailParagraph(
-        `Hi${input.holderName ? ` ${input.holderName}` : ""}, ${input.changeLine}`,
-      ),
-      emailRows([{ label: "Event", value: input.eventTitle }, ...input.detailLines]),
-      ...(input.cancelled
-        ? [
-            emailParagraph(
-              "This event has been cancelled by the organiser. If you paid for a ticket, contact the organiser or reply to this email and we will look at your options.",
-            ),
-          ]
-        : [emailParagraph("Check the details above before you travel.")]),
-      emailButton("View the event", input.eventUrl),
-    ].join(""),
-  });
-
-  const text = brandText([
-    input.cancelled ? `${input.eventTitle} has been cancelled` : `${input.eventTitle} has changed`,
-    "",
-    input.changeLine,
-    ...input.detailLines.map((line) => `${line.label}: ${line.value}`),
-    "",
-    `View the event: ${input.eventUrl}`,
-  ]);
-
-  return sendEmail({
-    to: input.to,
-    subject: input.cancelled
-      ? `${input.eventTitle} has been cancelled`
-      : `${input.eventTitle} has changed`,
-    html,
-    text,
-    meta: {
-      kind: "event-update",
-      dedupeKey: `event-update:${input.eventId}:${input.to}:${input.changedAt}`,
-    },
-  });
-}
-
-/* -------------------------------------------------------------------------- */
-/* Messages — a nudge back to the conversation                                 */
-/* -------------------------------------------------------------------------- */
-
-/**
- * A new message is waiting — only when the thread was quiet.
- *
- * Sent when a message arrives in a conversation with nothing else unread, and
- * at most once per conversation per day: email should bring someone back to a
- * quiet thread, never mirror a live chat message by message.
- */
 export async function sendMessageNotificationEmail(input: {
   to: string;
   name: string | null;
@@ -1580,9 +1402,9 @@ export async function sendMessageNotificationEmail(input: {
     preheader: input.preview,
     body: [
       emailParagraph(
-        `Hi${input.name ? ` ${input.name}` : ""}, <strong>${input.fromName}</strong> sent you a message in your LINK STORE conversation.`,
+        `Hi${input.name ? ` ${escapeEmailHtml(input.name)}` : ""}, <strong>${escapeEmailHtml(input.fromName)}</strong> sent you a message in your Rush Cart conversation.`,
       ),
-      emailPanel(emailParagraph(`“${input.preview}”`)),
+      emailPanel(emailParagraph(`“${escapeEmailHtml(input.preview)}”`)),
       emailButton("Open the conversation", conversationUrl),
       emailParagraph("You are only emailed when a conversation is waiting for you."),
     ].join(""),

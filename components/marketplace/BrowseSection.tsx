@@ -39,17 +39,7 @@ const PER_PAGE = 24;
  * separates "Products → Clothing → Men's Clothing" from "Products → Electronics"
  * — a narrowing inside one environment rather than a different environment.
  */
-const SECTION_CATEGORY_KIND: Record<string, string> = {
-  products: "product",
-  fashion: "product",
-  electronics: "product",
-  furniture: "product",
-  cars: "product",
-  food: "food",
-  services: "service",
-  digital: "digital",
-  rentals: "rental",
-};
+const SECTION_CATEGORY_KIND: Record<string, string> = { products: "product", fashion: "product", electronics: "product", furniture: "product" };
 
 const SORTS = ["newest", "oldest", "price_asc", "price_desc", "popular", "title"] as const;
 type Sort = (typeof SORTS)[number];
@@ -86,12 +76,7 @@ export async function BrowseSection({
   const path = basePath ?? `/${slug ?? "products"}`;
 
   const page = Math.max(1, Number.parseInt(pickParam(searchParams, "page") ?? "1", 10) || 1);
-  const explicitType = pickParam(searchParams, "type");
-  const types: ListingType[] | undefined = explicitType
-    ? [explicitType as ListingType]
-    : section && section.types.length > 0
-      ? section.types
-      : undefined;
+  const types: ListingType[] = ["product"];
 
   // Choosing a main category has to find everything filed beneath it, or the
   // tree would only work for its leaves. The subtree is resolved before the
@@ -167,7 +152,7 @@ export async function BrowseSection({
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-8 sm:px-6">
       <PageHeader
-        title={searching ? `Results for “${query.search}”` : heading}
+        title={searching ? `Results for “${query.search}”` : categoryName ? `Products · ${categoryName}` : heading}
         description={
           description ??
           (total > 0
@@ -179,7 +164,7 @@ export async function BrowseSection({
       <BrowseFilters
         basePath={path}
         categories={visibleCategories}
-        showTypeFilter={!section || section.types.length === 0}
+        showTypeFilter={false}
       />
 
       <ContextNotice
@@ -204,8 +189,8 @@ export async function BrowseSection({
             }
           />
         ) : (
-          <EmptyState icon="tag" title="No listings here yet"
-            description={`No seller has published anything in ${heading.toLowerCase()} yet. This section fills up as soon as the first listing goes live.`}
+          <EmptyState icon="tag" title={categoryName ? `No products in ${categoryName} yet` : "No products here yet"}
+            description={categoryName ? `Try another category or browse all products.` : "New products appear here as sellers publish them."}
             action={
               <ButtonLink href="/sign-up" variant="primary">
                 Start selling
@@ -213,7 +198,7 @@ export async function BrowseSection({
             }
             secondaryAction={
               <ButtonLink href="/products" variant="outline">
-                Browse all products
+                Explore Marketplace
               </ButtonLink>
             }
           />
@@ -225,7 +210,7 @@ export async function BrowseSection({
               a filter glide to their new places; new arrivals fade up — the
               interface reorganises rather than reloading. */}
           <RearrangeGroup
-            className="grid grid-cols-[repeat(auto-fill,minmax(17rem,1fr))] gap-4"
+            className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))] gap-4"
             itemClassName="h-full"
             items={listings.map((listing) => ({
               key: listing.id,

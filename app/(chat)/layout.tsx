@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { ChatApplication } from "@/components/chat/ChatApplication";
 
 export const metadata: Metadata = {
-  title: { default: "Messages", template: "%s · LINK STORE" },
+  title: { default: "Messages", template: "%s · Rush Cart" },
 };
 
 export const dynamic = "force-dynamic";

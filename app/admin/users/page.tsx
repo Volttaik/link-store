@@ -44,7 +44,7 @@ export default async function AdminUsersPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Users" description="Everyone with a LINK STORE account, and the storefronts they run."
+      <PageHeader title="Users" description="Everyone with a Rush Cart account, and the storefronts they run."
         breadcrumb={
           <span className="text-xs text-muted">
             Admin <span className="mx-1">/</span> Users

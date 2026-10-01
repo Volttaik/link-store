@@ -4,11 +4,10 @@ import { Button, Input, Modal, Pagination, SearchField, useOverlayState } from "
 
 import { OrbLoader } from "@/components/visual/OrbLoader";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 
 import { SelectField, SwitchField } from "@/components/ui/field";
 import { Icon } from "@/components/ui/Icon";
-import { LISTING_TYPES } from "@/lib/catalog";
 
 const SORT_OPTIONS = [
   { value: "newest", label: "Newest first" },
@@ -69,6 +68,8 @@ export function BrowseFilters({
   const { searchParams, update, isFiltering } = useUrlState(basePath);
   const [term, setTerm] = useState(searchParams.get("q") ?? "");
   const filters = useOverlayState();
+  const queryTerm = searchParams.get("q") ?? "";
+  useEffect(() => setTerm(queryTerm), [queryTerm]);
 
   const activeSort = searchParams.get("sort") ?? "newest";
   const activeType = searchParams.get("type") ?? "all";
@@ -76,11 +77,6 @@ export function BrowseFilters({
   const activeStock = searchParams.get("stock") === "1";
   const activeMin = searchParams.get("min") ?? "";
   const activeMax = searchParams.get("max") ?? "";
-
-  const typeOptions = [
-    { value: "all", label: "All types" },
-    ...LISTING_TYPES.map((type) => ({ value: type.value, label: type.plural })),
-  ];
 
   const categoryOptions = [
     { value: "all", label: "All categories" },
@@ -125,10 +121,10 @@ export function BrowseFilters({
             aria-label="Search"
             name="q"
             value={term}
-            onChange={setTerm}
+            onChange={value => { setTerm(value); if (!value) update({ q: null }); }}
             variant="secondary"
           >
-            <SearchField.Group>
+            <SearchField.Group className="rounded-full">
               <SearchField.SearchIcon />
               <SearchField.Input className="w-full" placeholder="Search this collection" />
               <SearchField.ClearButton />
@@ -186,14 +182,6 @@ export function BrowseFilters({
                 />
 
                 <div className="grid gap-4 sm:grid-cols-2">
-                  {showTypeFilter ? (
-                    <SelectField
-                      label="Type"
-                      options={typeOptions}
-                      value={activeType}
-                      onChange={(value) => update({ type: value === "all" ? null : String(value) })}
-                    />
-                  ) : null}
 
                   {categories.length > 0 ? (
                     <SelectField
@@ -201,7 +189,7 @@ export function BrowseFilters({
                       options={categoryOptions}
                       value={activeCategory}
                       onChange={(value) =>
-                        update({ category: value === "all" ? null : String(value) })
+                        update({ category: !value || value === "all" ? null : value })
                       }
                     />
                   ) : null}
@@ -210,7 +198,7 @@ export function BrowseFilters({
                 <div className="flex flex-col gap-2">
                   <span className="text-[13px] font-medium text-foreground">Price range</span>
                   <form
-                    className="flex items-end gap-2"
+                    className="flex flex-wrap items-end gap-2"
                     onSubmit={(event) => {
                       event.preventDefault();
                       const data = new FormData(event.currentTarget);
@@ -222,7 +210,8 @@ export function BrowseFilters({
                   >
                     <Input
                       aria-label="Minimum price"
-                      className="w-full"
+                      className="min-w-0 flex-1"
+                      key={`min:${activeMin}`}
                       defaultValue={activeMin}
                       inputMode="decimal"
                       name="min"
@@ -231,7 +220,8 @@ export function BrowseFilters({
                     />
                     <Input
                       aria-label="Maximum price"
-                      className="w-full"
+                      className="min-w-0 flex-1"
+                      key={`max:${activeMax}`}
                       defaultValue={activeMax}
                       inputMode="decimal"
                       name="max"

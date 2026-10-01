@@ -12,7 +12,7 @@ export default async function ElectronicsPage({
   return (
     <BrowseSection
       slug="electronics"
-      description="Phones, computers, gadgets and accessories listed on Link Store."
+      description="Phones, computers, gadgets and accessories listed on Rush Cart."
       searchParams={await searchParams}
     />
   );

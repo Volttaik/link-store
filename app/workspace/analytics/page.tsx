@@ -219,8 +219,8 @@ export default async function AnalyticsPage({
                 value={formatNumber(metrics.orders.paid)}
                 hint={`${formatNumber(metrics.orders.total - metrics.orders.paid)} unpaid`}
               />
-              <Metric label="Tickets sold"
-                value={formatNumber(metrics.events.ticketsSold)}
+              <Metric label="Products in Events"
+                value={formatNumber(metrics.events.products)}
                 hint={`${formatNumber(metrics.events.published)} published events`}
               />
             </Card.Content>

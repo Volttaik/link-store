@@ -22,7 +22,7 @@ export function ChatListHeader({ unreadCount }: { unreadCount: number }) {
       >
         <Icon name="arrowLeft" size={16} />
       </Link>
-      <h1 className="text-[17px] font-semibold tracking-tight text-foreground">Messages</h1>
+      <h1 className="text-[15px] font-semibold tracking-tight text-foreground">Messages</h1>
       {unreadCount > 0 ? (
         <span className="ml-auto rounded-full bg-accent/12 px-2 py-0.5 text-[10.5px] font-medium text-accent">
           {unreadCount} unread

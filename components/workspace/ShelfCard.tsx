@@ -86,7 +86,7 @@ export function ShelfCard({
         </div>
 
         <div className="mt-auto flex items-end justify-between gap-3">
-          <span className="text-[19px] leading-none font-semibold tabular-nums text-foreground">
+          <span className="text-[17px] leading-none font-semibold tabular-nums text-foreground">
             {formatMoney(listing.price, listing.currency)}
           </span>
           <span className="text-right text-[12px] text-muted">

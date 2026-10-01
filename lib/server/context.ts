@@ -33,8 +33,7 @@ import { countCustomers, listCustomers } from "./management";
 import { countUnreadThreads, listThreads } from "./messages";
 import { getStoreSettings } from "./stores";
 
-const PRODUCT_TYPES = ["physical", "fashion", "electronics", "furniture", "automotive", "other"];
-const SERVICE_TYPES = ["service"];
+const PRODUCT_TYPES = ["product"];
 const PANEL_LIMIT = 6;
 
 function statusTone(value: string | null | undefined): ContextTone {
@@ -52,8 +51,6 @@ export async function getWorkspaceContextData(
   const [
     products,
     productCount,
-    services,
-    serviceCount,
     listingCount,
     tracked,
     orders,
@@ -74,8 +71,6 @@ export async function getWorkspaceContextData(
     // not appear under the Listing heading in the menu either.
     listListings({ storeId: store.id, types: PRODUCT_TYPES, status: "active", sort: "newest", limit: PANEL_LIMIT }),
     countListings({ storeId: store.id, types: PRODUCT_TYPES, status: "active" }),
-    listListings({ storeId: store.id, types: SERVICE_TYPES, status: "active", sort: "newest", limit: PANEL_LIMIT }),
-    countListings({ storeId: store.id, types: SERVICE_TYPES, status: "active" }),
     countListings({ storeId: store.id, status: "all" }),
     listListings({ storeId: store.id, inStockOnly: false, limit: 100 }),
     listOrders({ storeId: store.id, limit: PANEL_LIMIT }),
@@ -92,19 +87,7 @@ export async function getWorkspaceContextData(
     countUnreadThreads(userId),
   ]);
 
-  // The remaining catalogue modules, each read on its own terms: the module's
-  // own rows, in the state that module opens on, plus what is waiting in Drafts.
-  const [foodItems, foodCount, rentalItems, rentalCount, digitalItems, digitalCount, draftItems, draftCount] =
-    await Promise.all([
-      listListings({ storeId: store.id, types: ["food"], status: "active", sort: "newest", limit: PANEL_LIMIT }),
-      countListings({ storeId: store.id, types: ["food"], status: "active" }),
-      listListings({ storeId: store.id, types: ["rental"], status: "active", sort: "newest", limit: PANEL_LIMIT }),
-      countListings({ storeId: store.id, types: ["rental"], status: "active" }),
-      listListings({ storeId: store.id, types: ["digital"], status: "active", sort: "newest", limit: PANEL_LIMIT }),
-      countListings({ storeId: store.id, types: ["digital"], status: "active" }),
-      listListings({ storeId: store.id, status: "draft", sort: "newest", limit: PANEL_LIMIT }),
-      countListings({ storeId: store.id, status: "draft" }),
-    ]);
+  const [draftItems, draftCount] = await Promise.all([listListings({ storeId: store.id, status: "draft", limit: PANEL_LIMIT }), countListings({ storeId: store.id, status: "draft" })]);
 
   const trackedListings = tracked.filter((listing) => listing.trackInventory);
   const inventoryItems = [...trackedListings].sort((a, b) => a.stock - b.stock).slice(0, PANEL_LIMIT);
@@ -152,9 +135,7 @@ export async function getWorkspaceContextData(
     badge:
       event.status === "draft"
         ? { label: "Draft, not published", tone: "default" as ContextTone }
-        : event.ticketsAvailable <= 0
-          ? { label: "Sold out", tone: "warning" as ContextTone }
-          : { label: `${formatNumber(event.ticketsAvailable)} left`, tone: "success" as ContextTone },
+        : { label: `${formatNumber(event.productCount)} products`, tone: "default" as ContextTone },
   });
 
   const windowOrders = metrics.orders.last30Days;
@@ -177,7 +158,6 @@ export async function getWorkspaceContextData(
 
     counts: {
       products: productCount,
-      services: serviceCount,
       listings: listingCount,
       inventory: trackedListings.length,
       orders: orderCount,
@@ -186,7 +166,6 @@ export async function getWorkspaceContextData(
     },
 
     products: products.map(moduleItem),
-    services: services.map(moduleItem),
 
     /*
      * One quick view per module.
@@ -199,20 +178,12 @@ export async function getWorkspaceContextData(
      */
     modules: {
       listing: products.map(moduleItem),
-      services: services.map(moduleItem),
-      food: foodItems.map(moduleItem),
-      rentals: rentalItems.map(moduleItem),
-      digital: digitalItems.map(moduleItem),
       drafts: draftItems.map(moduleItem),
       events: events.map(eventItem),
     },
 
     moduleCounts: {
       listing: productCount,
-      services: serviceCount,
-      food: foodCount,
-      rentals: rentalCount,
-      digital: digitalCount,
       drafts: draftCount,
       events: eventCount,
     },

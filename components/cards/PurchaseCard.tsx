@@ -146,7 +146,7 @@ export function PurchaseCard({ order }: { order: PurchaseSummary }) {
       {/* The transaction header: who was paid, the reference and when. */}
       <div className="flex flex-wrap items-start justify-between gap-3 p-5 pb-4">
         <div className="min-w-0">
-          <p className="truncate text-[16px] leading-tight font-semibold text-foreground">
+          <p className="truncate text-[15px] leading-tight font-semibold text-foreground">
             {order.store_name}
           </p>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-muted">
@@ -213,7 +213,7 @@ export function PurchaseCard({ order }: { order: PurchaseSummary }) {
             <span className="block text-[11px] font-medium tracking-wide text-muted uppercase">
               Total {paid ? "paid" : "due"}
             </span>
-            <span className="text-[19px] leading-none font-semibold tracking-tight tabular-nums text-foreground">
+            <span className="text-[17px] leading-none font-semibold tracking-tight tabular-nums text-foreground">
               {formatMoney(Number(order.total), order.currency)}
             </span>
           </span>

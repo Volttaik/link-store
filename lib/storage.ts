@@ -301,10 +301,8 @@ export async function putObject(
       await writeFile(target, body);
     }
   } catch (error) {
-    return {
-      ok: false,
-      error: `Upload failed: ${error instanceof Error ? error.message : "unknown storage error"}`,
-    };
+    console.error("[uploads] Upload failed", error);
+    return { ok: false, error: "Your file could not be uploaded. Please try again." };
   }
 
   return {

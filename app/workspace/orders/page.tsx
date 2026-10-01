@@ -282,7 +282,7 @@ export default async function WorkspaceOrdersPage({
 
                         {/* What it is worth — the loudest number in the row. */}
                         <div className="text-left lg:text-right">
-                          <span className="block text-[16px] font-semibold tabular-nums text-foreground">
+                          <span className="block text-[15px] font-semibold tabular-nums text-foreground">
                             {formatMoney(Number(order.total), order.currency)}
                           </span>
                           {Number(order.discount_total) > 0 ? (

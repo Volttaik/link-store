@@ -48,8 +48,8 @@ export function PriceTag({
   const sizeClasses = {
     sm: "text-[13.5px] font-medium",
     md: "text-[15px] font-semibold",
-    card: "text-[19px] leading-none font-semibold tracking-tight",
-    lg: "text-[28px] font-semibold tracking-tight",
+    card: "text-[17px] leading-none font-semibold tracking-tight",
+    lg: "text-[23px] font-semibold tracking-tight",
   } as const;
 
   return (
@@ -134,7 +134,7 @@ export function StatTile({
         {icon ? <Icon name={icon} size={15} className="shrink-0 text-muted" /> : null}
       </div>
 
-      <p className="text-[26px] leading-none font-semibold tracking-tight tabular-nums">{value}</p>
+      <p className="text-[21px] leading-none font-semibold tracking-tight tabular-nums">{value}</p>
 
       <div className="flex min-h-5 items-center gap-2">
         {trend ? (
@@ -179,7 +179,7 @@ export function PageHeader({
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0">
         {breadcrumb ? <div className="mb-2">{breadcrumb}</div> : null}
-        <h1 className="truncate text-[24px] leading-tight font-semibold tracking-tight text-foreground sm:text-[26px]">
+        <h1 className="truncate text-[20px] leading-tight font-semibold tracking-tight text-foreground sm:text-[22px]">
           {title}
         </h1>
         {description ? (
@@ -205,7 +205,7 @@ export function SectionHeader({
   return (
     <div className="flex items-end justify-between gap-4">
       <div className="min-w-0">
-        <h2 className="flex items-center gap-2.5 text-[17px] font-semibold tracking-tight text-foreground">
+        <h2 className="flex items-center gap-2.5 text-[15px] font-semibold tracking-tight text-foreground">
           {icon ? <Icon name={icon} size={17} className="text-muted" /> : null}
           {title}
         </h2>

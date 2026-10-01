@@ -28,7 +28,7 @@ export default async function AdminOverviewPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Platform overview" description="Every store, listing and naira that moves through LINK STORE."
+      <PageHeader title="Platform overview" description="Every store, listing and naira that moves through Rush Cart."
         breadcrumb={
           <span className="text-xs text-muted">
             Admin <span className="mx-1">/</span> Overview

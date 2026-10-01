@@ -6,7 +6,7 @@ import { requireAdmin } from "@/lib/auth";
 import { ADMIN_NAV } from "@/lib/workspace-nav";
 
 export const metadata = {
-  title: { default: "Platform admin", template: "%s · Admin · LINK STORE" },
+  title: { default: "Platform admin", template: "%s · Admin · Rush Cart" },
 };
 
 export const dynamic = "force-dynamic";

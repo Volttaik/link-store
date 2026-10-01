@@ -1,143 +1,64 @@
-/**
- * The shop card — a miniature storefront.
- *
- * A shop is not a product with a name attached, so this card is cut as a small
- * storefront interface: the shop sign (banner and logo) over the door, the
- * name and what kind of shop it is, what the seller says about it, then the
- * display window — a sideways shelf of the shop's *own* goods, real listings
- * with real photography, browsable without leaving the card — and finally the
- * door itself: Open Shop, the way in.
- *
- * Sections are established with tone, spacing and grouping — never with drawn
- * separator lines. The shelf is real listings and nothing else: a shop with no
- * published photography gets no shelf rather than a row of empty boxes.
- */
-
-import { Chip } from "@heroui/react/chip";
-import { Link } from "@heroui/react/link";
-
+import Link from "next/link";
 import { ChatAvatar } from "@/components/chat/ChatAvatar";
 import { Icon } from "@/components/ui/Icon";
-import { ButtonLink } from "@/components/ui/controls";
-import { RatingStars } from "@/components/ui/atoms";
-import { formatRelative, truncate } from "@/lib/format";
+import { ProductImage } from "@/components/marketplace/ProductImage";
+import { storeCategoryMeta } from "@/lib/catalog";
 import { formatMoney } from "@/lib/money";
 import type { StoreCard as StoreCardData } from "@/lib/server/discovery";
 
-export function ShopCard({
-  store,
-  rating,
-  ratingCount,
-  gallerySize = 4,
-}: {
-  store: StoreCardData;
-  rating?: number | null;
-  ratingCount?: number;
-  /** How many goods to show on the shelf. Cards in a narrow rail can afford fewer. */
-  gallerySize?: number;
+/**
+ * The shop card — a storefront as one discovery object.
+ *
+ * A shop is a place, not a product with a name attached, so this is cut as an
+ * editorial storefront: the shop's own sign (its picture and its name), the
+ * word the seller puts on the door, a window of the shop's **own** photography,
+ * and the way in. The card is the visual object — there is no surface behind
+ * it and no second card inside it; the page background runs straight through,
+ * and the composition holds itself up with space and hierarchy. One hairline
+ * of the platform's accent trio traces the card's edge (a quiet, still
+ * extension of the `.ls-edge` treatment) so the card reads as one finished
+ * object.
+ *
+ * The window is real listings and nothing else: a dominant product with
+ * supporting ones, drawn from the seller's published photography. A shop with
+ * nothing photographed yet gets no window rather than a row of empty boxes, and
+ * nothing in the card counts, ages or rates anything the seller has not said.
+ *
+ * Nothing here moves on its own. There is no carousel and no autoplay: a
+ * product is opened only by tapping it, and the shop only by choosing
+ * **Open Shop**. In a narrow card the product window is a contained,
+ * hand-scrolled shelf inside the card — it can never scroll the page or leave
+ * the card's edge.
+ */
+export function ShopCard({ store }: {
+  store: StoreCardData; rating?: number | null; ratingCount?: number;
 }) {
-  const location = [store.city, store.country].filter(Boolean).join(", ");
-  const shelf = store.gallery.slice(0, gallerySize);
+  const category = storeCategoryMeta(store.primaryCategory);
+  const products = store.gallery.slice(0, 4);
+  const story = store.tagline?.trim() || store.description?.trim() || null;
+  const place = [store.city, store.country].filter(Boolean).join(", ");
 
-  return (
-    <article className="ls-lift flex h-full flex-col overflow-hidden rounded-3xl bg-surface shadow-elev-2">
-      {/* The shop sign: the seller's own banner, with the logo plate hung over
-          its edge like a sign over a door. */}
-      <div className="relative h-24 w-full overflow-hidden bg-surface-secondary">
-        {store.bannerUrl ? (
-          <img alt="" className="h-full w-full object-cover" loading="lazy" src={store.bannerUrl} />
-        ) : (
-          <div className="ls-tone h-full w-full" aria-hidden="true" />
-        )}
-      </div>
-
-      <div className="flex flex-col gap-3 px-4 pt-0 pb-4">
-        {/* Identity — the sign, the name and the window card. */}
-        <div className="-mt-6 flex items-end gap-3">
-          {/* The shop's picture, exactly as chat draws the picture of whoever
-              you are talking to: the same profile-picture component, size,
-              fit and treatment — so a shop looks the same wherever it appears. */}
-          <ChatAvatar
-            className="shrink-0"
-            name={store.name}
-            size={44}
-            src={store.logoUrl}
-          />
-
-          <div className="min-w-0 flex-1 pb-0.5">
-            <Link
-              className="block truncate text-[16px] leading-tight font-semibold text-foreground no-underline"
-              href={`/@${store.slug}`}
-            >
-              {store.name}
-            </Link>
-            <p className="truncate text-[12px] text-muted">
-              @{store.slug}
-              {location ? ` · ${location}` : ""}
-            </p>
-          </div>
-
-          {store.primaryCategory ? (
-            <Chip className="mb-0.5 shrink-0" size="sm" variant="soft">
-              {store.primaryCategory}
-            </Chip>
-          ) : null}
+  return <article data-shop-card={store.slug} className="shop-discovery">
+    <div className="shop-discovery-identity">
+      <Link href={`/@${store.slug}`} className="shop-discovery-sign ls-focus-ring no-underline">
+        <ChatAvatar name={store.name} src={store.logoUrl} size={88} className="shop-discovery-logo" />
+        <div className="min-w-0">
+          {category ? <p className="shop-discovery-kind">{category.label}</p> : null}
+          <h3 className="shop-discovery-name text-foreground">{store.name}</h3>
         </div>
-
-        {typeof rating === "number" ? <RatingStars rating={rating} count={ratingCount} /> : null}
-
-        <p className="line-clamp-2 text-[13px] leading-relaxed text-muted">
-          {store.tagline ?? "A shop on LINK STORE."}
-        </p>
+      </Link>
+      {story ? <p className="shop-discovery-story">{story}</p> : null}
+      <div className="shop-discovery-foot">
+        <Link href={`/@${store.slug}`} className="shop-discovery-door ls-focus-ring">Open Shop<Icon name="arrowRight" size={16} /></Link>
+        {place ? <span className="shop-discovery-place">{place}</span> : null}
       </div>
+    </div>
 
-      {/* The display window: the shop's own goods, browsable inside the card. */}
-      {shelf.length > 0 ? (
-        <div className="bg-surface-secondary/45 px-4 py-3">
-          <div className="ls-shelf">
-            {shelf.map((item) => (
-              <Link
-                key={item.id}
-                aria-label={`${item.title} from ${store.name}`}
-                className="group/goods flex w-32 shrink-0 snap-start flex-col gap-1.5 no-underline"
-                href={`/listing/${item.id}`}
-              >
-                <span className="media-frame block aspect-square w-full overflow-hidden bg-surface-secondary">
-                  <img
-                    alt={item.title}
-                    className="h-full w-full object-cover transition-transform duration-500 ease-out motion-safe:group-hover/goods:scale-[1.05]"
-                    loading="lazy"
-                    src={item.imageUrl}
-                  />
-                </span>
-                <span className="truncate text-[11.5px] leading-tight text-muted transition-colors group-hover/goods:text-foreground">
-                  {truncate(item.title, 32)}
-                </span>
-                <span className="text-[12px] font-semibold tabular-nums text-foreground">
-                  {formatMoney(item.price, item.currency)}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {/* The door: when the shop opened, and the way in. No inventory tallies —
-          the marketplace shows goods, not counts of goods. */}
-      <div className="mt-auto flex flex-col gap-3 px-4 pt-4">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-muted">
-          <span className="flex items-center gap-1.5">
-            <Icon name="clock" size={12} className="shrink-0" />
-            Joined {formatRelative(store.createdAt)}
-          </span>
-        </div>
-
-        <ButtonLink fullWidth href={`/@${store.slug}`} size="sm" variant="primary">
-          <Icon name="storefront" size={14} />
-          Open Shop
-          <Icon name="arrowRight" size={14} />
-        </ButtonLink>
-      </div>
-    </article>
-  );
+    {products.length ? <nav aria-label={`Products from ${store.name}`} className="shop-discovery-gallery" data-previews={products.length}>
+      {products.map((product, index) => <Link key={product.id} href={`/listing/${product.id}`} aria-label={`${product.title} from ${store.name}`} className={`shop-discovery-product shop-discovery-product-${index} ls-focus-ring no-underline`}>
+        <span className="shop-discovery-frame"><ProductImage src={product.imageUrl} title={product.title} /></span>
+        <span className="shop-discovery-caption"><span className="shop-discovery-title">{product.title}</span><span className="shop-discovery-price">{formatMoney(product.price, product.currency)}</span></span>
+      </Link>)}
+    </nav> : null}
+  </article>;
 }

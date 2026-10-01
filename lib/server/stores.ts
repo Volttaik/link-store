@@ -9,6 +9,8 @@
 import "server-only";
 
 import { batch, bool, execute, query, queryOne } from "../db";
+import { isGenericCategory, isSupportedCategory } from "../categories";
+import { STORE_CATEGORIES } from "../catalog";
 import { nowIso } from "../format";
 import { newId } from "../ids";
 import { handleError, normalizeHandle, slugify } from "../slug";
@@ -54,7 +56,6 @@ export type CreateStoreInput = {
   state?: string | null;
   country?: string | null;
   logoUrl?: string | null;
-  bannerUrl?: string | null;
 };
 
 export type CreateStoreResult =
@@ -66,6 +67,7 @@ export async function createStore(input: CreateStoreInput): Promise<CreateStoreR
   const validation = handleError(slug);
   if (validation) return { ok: false, error: validation, field: "slug" };
 
+  if (input.primaryCategory && !STORE_CATEGORIES.some(category => category.value === input.primaryCategory)) return { ok: false, error: "Choose a product category.", field: "primaryCategory" };
   const name = input.name.trim();
   if (name.length < 2) return { ok: false, error: "Store name is too short.", field: "name" };
   if (name.length > 80) return { ok: false, error: "Store name is too long.", field: "name" };
@@ -90,10 +92,10 @@ export async function createStore(input: CreateStoreInput): Promise<CreateStoreR
   await batch([
     {
       sql: `INSERT INTO stores
-              (id, user_id, slug, name, tagline, description, logo_url, banner_url,
+              (id, user_id, slug, name, tagline, description, logo_url,
                primary_category, currency, contact_email, contact_phone, city, state, country,
                is_published, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
       args: [
         id,
         input.userId,
@@ -102,7 +104,6 @@ export async function createStore(input: CreateStoreInput): Promise<CreateStoreR
         input.tagline?.trim() || null,
         input.description?.trim() || null,
         input.logoUrl ?? null,
-        input.bannerUrl ?? null,
         input.primaryCategory ?? null,
         input.currency ?? "NGN",
         input.contactEmail?.trim().toLowerCase() || null,
@@ -127,7 +128,7 @@ export async function createStore(input: CreateStoreInput): Promise<CreateStoreR
 
 function buildOrderPrefix(name: string): string {
   const letters = name.replace(/[^A-Za-z]/g, "").toUpperCase();
-  return letters.slice(0, 3) || "LS";
+  return letters.slice(0, 3) || "RC";
 }
 
 export type UpdateStoreInput = Partial<{
@@ -145,7 +146,6 @@ export type UpdateStoreInput = Partial<{
   state: string | null;
   country: string | null;
   logoUrl: string | null;
-  bannerUrl: string | null;
   socials: Record<string, string> | null;
   isPublished: boolean;
 }>;
@@ -158,6 +158,7 @@ export async function updateStore(
   const store = await getOwnedStore(storeId, userId);
   if (!store) return { ok: false, error: "Store not found." };
 
+  if ("primaryCategory" in patch && patch.primaryCategory && !STORE_CATEGORIES.some(category => category.value === patch.primaryCategory)) return { ok: false, error: "Choose a product category." };
   const sets: string[] = [];
   const args: Array<string | number | null> = [];
 
@@ -196,7 +197,6 @@ export async function updateStore(
   if (patch.state !== undefined) push("state", patch.state?.trim() || null);
   if (patch.country !== undefined) push("country", patch.country?.trim() || null);
   if (patch.logoUrl !== undefined) push("logo_url", patch.logoUrl || null);
-  if (patch.bannerUrl !== undefined) push("banner_url", patch.bannerUrl || null);
   if (patch.socials !== undefined) {
     push("socials", patch.socials ? JSON.stringify(patch.socials) : null);
   }
@@ -237,7 +237,7 @@ export async function getStoreSettings(storeId: string): Promise<StoreSettingsRo
     created ?? {
       store_id: storeId,
       low_stock_threshold: 5,
-      order_prefix: "LS",
+      order_prefix: "RC",
       shipping_flat_fee: 0,
       free_shipping_over: null,
       payout_bank_code: null,
@@ -298,7 +298,7 @@ export async function updateStoreSettings(
   }
   if (patch.orderPrefix !== undefined) {
     sets.push("order_prefix = ?");
-    args.push(patch.orderPrefix.replace(/[^A-Za-z0-9]/g, "").slice(0, 4).toUpperCase() || "LS");
+    args.push(patch.orderPrefix.replace(/[^A-Za-z0-9]/g, "").slice(0, 4).toUpperCase() || "RC");
   }
   if (patch.shippingFlatFee !== undefined) {
     sets.push("shipping_flat_fee = ?");
@@ -352,6 +352,7 @@ export async function updateStoreSettings(
     // "auto" clears the override — the storefront goes back to following what
     // the shop actually sells.
     const value = patch.designType.trim();
+    if (!["auto", "products", "events"].includes(value)) return { ok: false, error: "Choose a valid storefront style." };
     sets.push("design_type = ?");
     args.push(value && value !== "auto" ? value : null);
   }
@@ -388,26 +389,26 @@ export function storeSocials(store: StoreRow): Record<string, string> {
 // --- Categories -------------------------------------------------------------
 
 export async function listPlatformCategories(): Promise<CategoryRow[]> {
-  return query<CategoryRow>(
-    "SELECT * FROM categories WHERE store_id IS NULL ORDER BY position ASC, name ASC",
-  );
+  return (await query<CategoryRow>(
+    "SELECT * FROM categories WHERE store_id IS NULL AND kind = 'product' ORDER BY position ASC, name ASC",
+  )).filter(isSupportedCategory);
 }
 
 export async function listStoreCategories(storeId: string): Promise<CategoryRow[]> {
-  return query<CategoryRow>(
-    "SELECT * FROM categories WHERE store_id = ? ORDER BY position ASC, name ASC",
+  return (await query<CategoryRow>(
+    "SELECT * FROM categories WHERE store_id = ? AND kind = 'product' ORDER BY position ASC, name ASC",
     [storeId],
-  );
+  )).filter(isSupportedCategory);
 }
 
 /** Platform categories plus this store's own — the seller's picker. */
 export async function listAvailableCategories(storeId: string): Promise<CategoryRow[]> {
-  return query<CategoryRow>(
+  return (await query<CategoryRow>(
     `SELECT * FROM categories
-     WHERE store_id IS NULL OR store_id = ?
+     WHERE (store_id IS NULL OR store_id = ?) AND kind = 'product'
      ORDER BY (store_id IS NULL) ASC, position ASC, name ASC`,
     [storeId],
-  );
+  )).filter(isSupportedCategory);
 }
 
 export async function getCategory(id: string): Promise<CategoryRow | null> {
@@ -425,6 +426,7 @@ export async function createCategory(input: {
   if (!store) return { ok: false, error: "Store not found." };
 
   const name = input.name.trim();
+  if (isGenericCategory(name)) return { ok: false, error: "Choose a specific product category, not a catch-all." };
   if (name.length < 2) return { ok: false, error: "Category name is too short." };
   if (name.length > 60) return { ok: false, error: "Category name is too long." };
 
@@ -449,7 +451,7 @@ export async function createCategory(input: {
       input.storeId,
       name,
       slug,
-      input.kind ?? "general",
+      "product",
       input.icon ?? null,
       positionRow?.next ?? 1,
       nowIso(),
@@ -484,13 +486,14 @@ export async function updateCategory(input: {
 
   if (input.name !== undefined) {
     const name = input.name.trim();
+    if (isGenericCategory(name)) return { ok: false, error: "Choose a specific product category, not a catch-all." };
     if (name.length < 2) return { ok: false, error: "Category name is too short." };
     sets.push("name = ?", "slug = ?");
     args.push(name, slugify(name));
   }
   if (input.kind !== undefined) {
     sets.push("kind = ?");
-    args.push(input.kind);
+    args.push("product");
   }
   if (input.icon !== undefined) {
     sets.push("icon = ?");

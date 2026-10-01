@@ -6,15 +6,14 @@ import { useState, useTransition } from "react";
 
 import { AuthTriggerButton } from "@/components/auth/AuthTriggerButton";
 import { BrandMark, Icon, Wordmark, type IconName } from "@/components/ui/Icon";
-import { MARKETPLACE_SECTIONS } from "@/lib/catalog";
 import type { SessionUser } from "@/lib/types";
 import type { UserState } from "@/lib/user-state";
 
 import { ThemeToggle } from "./ThemeToggle";
 
 const PRIMARY_LINKS: Array<{ href: string; label: string; icon: IconName }> = [
-  { href: "/products", label: "Marketplace", icon: "marketplace" },
   { href: "/stores", label: "Stores", icon: "shop" },
+  { href: "/people", label: "People", icon: "customers" },
   { href: "/events", label: "Events", icon: "events" },
 ];
 
@@ -54,10 +53,12 @@ const ACCOUNT_ROW =
 export function MarketplaceNavbar({
   user,
   userState,
+  categories,
   cartCount,
   messageCount = 0,
 }: {
   user: SessionUser | null;
+  categories: Array<{ id: string; name: string; parentId: string | null }>;
   /**
    * Who this person is: `guest`, `account` (signed in, no workspace) or
    * `workspace` (owns one). The account menu and the header CTA are built from
@@ -88,6 +89,9 @@ export function MarketplaceNavbar({
       const { signOutAction } = await import("@/app/actions/auth");
       try {
         await signOutAction();
+        const { resetChatRealtime } = await import("@/lib/chat/realtime");
+        resetChatRealtime();
+        window.dispatchEvent(new Event("rush-cart:signed-out"));
         // In place: the revalidated layouts render the signed-out experience
         // and the router lands on the marketplace home — no browser reload.
         router.push("/");
@@ -101,7 +105,6 @@ export function MarketplaceNavbar({
   };
 
   // The three states, once, for every choice below.
-  const isGuest = userState.kind === "guest";
   const isOwner = userState.kind === "workspace";
 
   const submitSearch = (value: string) => {
@@ -126,7 +129,7 @@ export function MarketplaceNavbar({
         <button
           type="button"
           aria-label="Open menu"
-          className={`ls-focus-ring flex size-8 flex-none aspect-square items-center justify-center rounded-full border-0 p-0 transition-colors lg:hidden motion-safe:active:scale-95 ${
+          className={`ls-focus-ring flex size-8 flex-none aspect-square items-center justify-center rounded-full border-0 p-0 transition-colors motion-safe:active:scale-95 ${
             mobileNav.isOpen
               ? "ls-edge bg-surface shadow-elev-2"
               : "hover:bg-surface-secondary/60"
@@ -173,7 +176,7 @@ export function MarketplaceNavbar({
 
         <div className="mx-auto hidden w-full min-w-0 max-w-sm md:block">
           <SearchField
-            aria-label="Search Link Store"
+            aria-label="Search Rush Cart"
             value={query}
             onChange={setQuery}
             onSubmit={() => submitSearch(query)}
@@ -297,10 +300,6 @@ export function MarketplaceNavbar({
                     <Icon name="receipt" size={15} className="shrink-0 text-muted" />
                     <Label>My orders</Label>
                   </Dropdown.Item>
-                  <Dropdown.Item id="/tickets" textValue="My tickets">
-                    <Icon name="ticket" size={15} className="shrink-0 text-muted" />
-                    <Label>My tickets</Label>
-                  </Dropdown.Item>
                   <Dropdown.Item id="/messages" textValue="Messages">
                     <Icon name="message" size={15} className="shrink-0 text-muted" />
                     <Label>Messages</Label>
@@ -398,7 +397,7 @@ export function MarketplaceNavbar({
                     same line without a name rather than an invented one. */}
                 <div className="p-3">
                   <p className="truncate text-[13px] font-medium text-foreground">
-                    {user ? `Welcome, ${user.name}` : "Welcome to Link Store"}
+                    {user ? `Welcome, ${user.name}` : "Welcome to Rush Cart"}
                   </p>
                 </div>
 
@@ -409,27 +408,24 @@ export function MarketplaceNavbar({
                         key={link.href}
                         href={link.href}
                         onClick={() => mobileNav.close()}
-                        className={`${MENU_ROW} text-foreground hover:bg-surface-secondary`}
+                        aria-current={pathname === link.href ? "page" : undefined}
+                        className={`${MENU_ROW} ${pathname === link.href ? "bg-surface-secondary font-semibold" : "text-foreground hover:bg-surface-secondary"}`}
                       >
                         <Icon name={link.icon} size={16} className="shrink-0 text-muted" />
                         {link.label}
                       </Link>
                     ))}
                   </MenuSegment>
+                  <section aria-label="Marketplace" className="border-t border-border pt-4">
+                    <Link href="/products" onClick={() => mobileNav.close()} aria-current={pathname === "/products" && !searchParams.get("category") ? "page" : undefined} className={`${MENU_ROW} font-semibold text-foreground`}><Icon name="marketplace" size={16} />Marketplace</Link>
+                    <nav aria-label="Product categories" className="ml-4 flex flex-col border-l border-border pl-2">
+                      {categories.map(category => {
+                        const active = pathname === "/products" && searchParams.get("category") === category.id;
+                        return <Link key={category.id} href={`/products?category=${encodeURIComponent(category.id)}`} onClick={() => mobileNav.close()} aria-current={active ? "page" : undefined} className={`flex min-h-11 items-center rounded-lg py-2 pr-2 text-[13px] no-underline transition-colors ${category.parentId ? "pl-5" : "pl-3"} ${active ? "bg-surface-secondary font-semibold text-foreground" : "text-muted hover:bg-surface-secondary hover:text-foreground"}`}>{category.name}</Link>;
+                      })}
+                    </nav>
+                  </section>
 
-                  <MenuSegment title="Categories">
-                    {MARKETPLACE_SECTIONS.map((section) => (
-                      <Link
-                        key={section.slug}
-                        href={`/${section.slug}`}
-                        onClick={() => mobileNav.close()}
-                        className={`${MENU_ROW} text-muted hover:bg-surface-secondary hover:text-foreground`}
-                      >
-                        <Icon name={section.icon} size={16} className="shrink-0" />
-                        {section.label}
-                      </Link>
-                    ))}
-                  </MenuSegment>
                 </div>
 
                 {/* Account — a profile card, not another list of links. */}
@@ -478,14 +474,6 @@ export function MarketplaceNavbar({
                         >
                           <Icon name="receipt" size={15} className="shrink-0 text-muted" />
                           My orders
-                        </Link>
-                        <Link
-                          href="/tickets"
-                          onClick={() => mobileNav.close()}
-                          className={`${ACCOUNT_ROW} text-foreground hover:bg-surface-secondary`}
-                        >
-                          <Icon name="ticket" size={15} className="shrink-0 text-muted" />
-                          My tickets
                         </Link>
                         <Link
                           href="/messages"

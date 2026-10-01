@@ -21,7 +21,7 @@ import { authClient } from "@/lib/auth/client";
 import { readAuthError } from "@/lib/auth/messages";
 
 const NOT_CONFIGURED =
-  "Google sign-in is not switched on for this deployment yet. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable it.";
+  "Google sign-in is currently unavailable. Please sign in with your email instead.";
 
 /** Google's official mark. Colours are fixed by Google's brand rules. */
 function GoogleMark() {

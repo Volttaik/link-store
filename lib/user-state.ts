@@ -114,20 +114,13 @@ export type Capability =
   | "messaging"
   | "buyProduct"
   | "viewMyOrders"
-  | "purchaseTicket"
-  | "viewMyTickets"
   | "manageOwnProfile"
   | "saveFavorites"
   | "createWorkspace"
   // Workspace layer — signed in AND owns a workspace.
   | "createProduct"
-  | "createService"
-  | "createFood"
-  | "createDigital"
-  | "createRental"
   | "createEvent"
   | "manageStore"
-  | "manageTickets"
   | "manageSellerOrders"
   | "manageInventory"
   | "manageDiscounts"
@@ -154,21 +147,14 @@ export const CAPABILITIES: Record<Capability, CapabilityRequirement> = {
   messaging: { account: true, workspace: false },
   buyProduct: { account: true, workspace: false },
   viewMyOrders: { account: true, workspace: false },
-  purchaseTicket: { account: true, workspace: false },
-  viewMyTickets: { account: true, workspace: false },
   manageOwnProfile: { account: true, workspace: false },
   saveFavorites: { account: true, workspace: false },
   createWorkspace: { account: true, workspace: false },
 
   // Workspace layer.
   createProduct: { account: true, workspace: true },
-  createService: { account: true, workspace: true },
-  createFood: { account: true, workspace: true },
-  createDigital: { account: true, workspace: true },
-  createRental: { account: true, workspace: true },
   createEvent: { account: true, workspace: true },
   manageStore: { account: true, workspace: true },
-  manageTickets: { account: true, workspace: true },
   manageSellerOrders: { account: true, workspace: true },
   manageInventory: { account: true, workspace: true },
   manageDiscounts: { account: true, workspace: true },

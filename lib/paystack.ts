@@ -50,12 +50,13 @@ async function call<T>(
   if (!isPaystackConfigured) {
     return {
       ok: false,
-      error: "Paystack is not configured. Set PAYSTACK_SECRET_KEY to accept payments.",
+      error: "Payments are currently unavailable. Please try again later.",
     };
   }
 
   try {
     const response = await fetch(`${API_BASE}${path}`, {
+      signal: AbortSignal.timeout(15000),
       method: init.method,
       headers: {
         Authorization: `Bearer ${paystackConfig.secretKey}`,
@@ -78,10 +79,10 @@ async function call<T>(
     }
 
     return { ok: true, data: payload.data };
-  } catch (error) {
+  } catch {
     return {
       ok: false,
-      error: `Could not reach Paystack: ${error instanceof Error ? error.message : "network error"}`,
+      error: "The payment provider could not be reached. Please try again later.",
     };
   }
 }

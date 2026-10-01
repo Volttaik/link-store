@@ -9,12 +9,12 @@
 import "server-only";
 
 import { batch, bool, execute, query, queryOne, type BatchStatement } from "../db";
+import { isGenericCategory, isSupportedCategory } from "../categories";
 import { nowIso } from "../format";
 import { newId } from "../ids";
 import { slugify } from "../slug";
 import { listingTypeMeta, type FulfilmentMode, type ListingType } from "../catalog";
 import type {
-  DigitalAssetRow,
   ListingCardData,
   ListingDetail,
   ListingImageRow,
@@ -31,9 +31,7 @@ type ListingJoinRow = ListingRow & {
   image_url: string | null;
   variant_count: number;
   /** Latest digital file, so a digital card can name what is delivered. */
-  digital_file_name: string | null;
   /** The event a ticket listing sells admission to, where one is linked. */
-  event_id: string | null;
 };
 
 const LISTING_SELECT = `
@@ -46,13 +44,7 @@ const LISTING_SELECT = `
            WHERE lv.listing_id = l.id) AS variant_count,
          (SELECT li.image_url FROM listing_images li
            WHERE li.listing_id = l.id
-           ORDER BY li.position ASC, li.created_at ASC LIMIT 1) AS image_url,
-         (SELECT a.file_name FROM digital_assets a
-           WHERE a.listing_id = l.id
-           ORDER BY a.version DESC, a.created_at DESC LIMIT 1) AS digital_file_name,
-         (SELECT e.id FROM events e
-           WHERE e.listing_id = l.id
-           ORDER BY e.created_at ASC LIMIT 1) AS event_id
+           ORDER BY li.position ASC, li.created_at ASC LIMIT 1) AS image_url
   FROM listings l
   JOIN stores s ON s.id = l.store_id
   LEFT JOIN categories c ON c.id = l.category_id`;
@@ -79,9 +71,6 @@ export function mapListingCard(row: ListingJoinRow): ListingCardData {
   // a card reading one shape, and the file name is exactly what a digital card
   // has to say for itself.
   const attributes = parseJsonObject(row.attributes);
-  if (row.digital_file_name && !attributes.fileName) {
-    attributes.fileName = row.digital_file_name;
-  }
 
   return {
     id: row.id,
@@ -97,7 +86,8 @@ export function mapListingCard(row: ListingJoinRow): ListingCardData {
     compareAtPrice: row.compare_at_price === null ? null : Number(row.compare_at_price),
     currency: row.currency,
     imageUrl: row.image_url,
-    categoryName: row.category_name,
+    categoryName: isGenericCategory(row.category_name) ? null : row.category_name,
+    categoryId: row.category_id,
     status: row.status,
     stock: Number(row.stock),
     trackInventory: bool(row.track_inventory),
@@ -105,7 +95,7 @@ export function mapListingCard(row: ListingJoinRow): ListingCardData {
     variantCount: Number(row.variant_count ?? 0),
     viewsCount: Number(row.views_count),
     createdAt: row.created_at,
-    eventId: row.event_id ?? null,
+    eventId: null,
     durationMinutes: row.duration_minutes,
     serviceMode: row.service_mode,
     prepTimeMinutes: row.prep_time_minutes,
@@ -193,7 +183,7 @@ const SORTS: Record<NonNullable<ListingQuery["sort"]>, string> = {
 };
 
 function buildListingWhere(input: ListingQuery): { clause: string; args: Array<string | number> } {
-  const conditions: string[] = [];
+  const conditions: string[] = ["l.type = 'product'"];
   const args: Array<string | number> = [];
 
   if (input.storeId) {
@@ -333,6 +323,14 @@ export async function listListings(input: ListingQuery = {}): Promise<ListingCar
   return rows.map(mapListingCard);
 }
 
+/** Store-scoped Event picker; does not silently truncate a store at 100 products. */
+export async function listProductsForEvent(storeId: string, options: { activeOnly?: boolean; productIds?: string[] } = {}): Promise<ListingCardData[]> {
+  if (options.productIds && !options.productIds.length) return [];
+  const ids = options.productIds;
+  const rows = await query<ListingJoinRow>(`${LISTING_SELECT} WHERE l.store_id = ? AND l.type = 'product' ${options.activeOnly ? "AND l.status = 'active'" : ""} ${ids ? `AND l.id IN (${ids.map(() => "?").join(",")})` : ""} ORDER BY l.created_at DESC`, [storeId, ...(ids ?? [])]);
+  return rows.map(mapListingCard);
+}
+
 export async function countListings(input: ListingQuery = {}): Promise<number> {
   const { clause, args } = buildListingWhere(input);
   const row = await queryOne<{ total: number }>(
@@ -369,7 +367,7 @@ export async function getOwnedListing(
   listingId: string,
   storeId: string,
 ): Promise<ListingRow | null> {
-  return queryOne<ListingRow>("SELECT * FROM listings WHERE id = ? AND store_id = ?", [
+  return queryOne<ListingRow>("SELECT * FROM listings WHERE id = ? AND store_id = ? AND type = 'product'", [
     listingId,
     storeId,
   ]);
@@ -389,26 +387,19 @@ export async function listListingVariants(listingId: string): Promise<ListingVar
   );
 }
 
-export async function listDigitalAssets(listingId: string): Promise<DigitalAssetRow[]> {
-  return query<DigitalAssetRow>(
-    "SELECT * FROM digital_assets WHERE listing_id = ? ORDER BY version DESC, created_at DESC",
-    [listingId],
-  );
-}
-
 export async function getVariant(variantId: string): Promise<ListingVariantRow | null> {
   return queryOne<ListingVariantRow>("SELECT * FROM listing_variants WHERE id = ?", [variantId]);
 }
 
 /** Full detail for the product page and the workspace editor. */
 export async function getListingDetail(listingId: string): Promise<ListingDetail | null> {
-  const row = await queryOne<ListingJoinRow>(`${LISTING_SELECT} WHERE l.id = ?`, [listingId]);
+  const row = await queryOne<ListingJoinRow>(`${LISTING_SELECT} WHERE l.id = ? AND l.type = 'product'`, [listingId]);
   if (!row) return null;
 
   const [images, variants, digitalAssets, store] = await Promise.all([
     listListingImages(row.id),
     listListingVariants(row.id),
-    listDigitalAssets(row.id),
+    Promise.resolve([]),
     queryOne<{
       currency: string;
       city: string | null;
@@ -491,6 +482,23 @@ export type ListingInput = {
   }>;
 };
 
+async function validateProductInput(storeId: string, input: ListingInput): Promise<string | null> {
+  if (input.type !== "product") return "Only products can be sold.";
+  if (!Number.isSafeInteger(input.price) || input.price < 0) return "Enter a valid product price.";
+  if (!Number.isSafeInteger(input.stock) || input.stock < 0) return "Enter a whole stock quantity.";
+  if (!["draft", "active", "archived"].includes(input.status)) return "Choose a valid status.";
+  if (input.compareAtPrice != null && (!Number.isSafeInteger(input.compareAtPrice) || input.compareAtPrice < 0)) return "Enter a valid compare-at price.";
+  if (input.status === "active" && !input.categoryId) return "Category required before publishing.";
+  if (input.status === "active" && (!Array.isArray(input.images) || !input.images.length)) return "Product image required before publishing.";
+  if (input.categoryId) {
+    const category = await queryOne<{ name: string; slug: string }>("SELECT name, slug FROM categories WHERE id = ? AND kind = 'product' AND (store_id IS NULL OR store_id = ?)", [input.categoryId, storeId]);
+    if (!category || !isSupportedCategory(category)) return "Choose a specific product category belonging to your store.";
+  }
+  if (!Array.isArray(input.images) || input.images.length > 12 || input.images.some(image => typeof image.url !== "string" || !/^(https?:\/\/|\/api\/files\/)/.test(image.url))) return "Choose valid product photos.";
+  if (!Array.isArray(input.variants) || input.variants.length > 60 || input.variants.some(variant => !variant.name?.trim() || !Number.isSafeInteger(variant.stock) || variant.stock < 0 || (variant.price != null && (!Number.isSafeInteger(variant.price) || variant.price < 0)))) return "Check your product options, prices and stock.";
+  return null;
+}
+
 async function uniqueListingSlug(storeId: string, title: string, excludeId?: string): Promise<string> {
   const base = slugify(title);
   let candidate = base;
@@ -513,7 +521,8 @@ export async function createListing(
 ): Promise<{ ok: true; listingId: string } | { ok: false; error: string }> {
   const title = input.title.trim();
   if (title.length < 2) return { ok: false, error: "Give this listing a name." };
-  if (input.price < 0) return { ok: false, error: "Price cannot be negative." };
+  const validationError = await validateProductInput(storeId, input);
+  if (validationError) return { ok: false, error: validationError };
 
   const id = newId("lst");
   const timestamp = nowIso();
@@ -548,7 +557,7 @@ export async function createListing(
         input.costPrice ?? null,
         input.sku?.trim() || null,
         input.trackInventory ? 1 : 0,
-        input.trackInventory ? Math.max(0, Math.floor(input.stock)) : 0,
+        input.trackInventory ? (input.variants.length ? input.variants.reduce((total, variant) => total + variant.stock, 0) : input.stock) : 0,
         input.durationMinutes ?? null,
         input.serviceMode ?? null,
         input.prepTimeMinutes ?? null,
@@ -588,7 +597,8 @@ export async function updateListing(
 
   const title = input.title.trim();
   if (title.length < 2) return { ok: false, error: "Give this listing a name." };
-  if (input.price < 0) return { ok: false, error: "Price cannot be negative." };
+  const validationError = await validateProductInput(storeId, input);
+  if (validationError) return { ok: false, error: validationError };
 
   const timestamp = nowIso();
   const meta = listingTypeMeta(input.type);
@@ -601,7 +611,15 @@ export async function updateListing(
   const publishedAt =
     nextStatus === "active" ? existing.published_at ?? timestamp : existing.published_at;
 
-  const stock = input.trackInventory ? Math.max(0, Math.floor(input.stock)) : 0;
+  const previousVariants = await listListingVariants(listingId);
+  const previousById = new Map(previousVariants.map(variant => [variant.id, variant]));
+  const submittedIds = input.variants.flatMap(variant => variant.id ? [variant.id] : []);
+  if (new Set(submittedIds).size !== submittedIds.length || submittedIds.some(id => !previousById.has(id))) {
+    return { ok: false, error: "One of these product options is no longer available. Reload and try again." };
+  }
+  const stock = input.trackInventory
+    ? (input.variants.length ? input.variants.reduce((total, variant) => total + variant.stock, 0) : input.stock)
+    : 0;
   const stockDelta = stock - Number(existing.stock);
 
   const statements: BatchStatement[] = [
@@ -641,18 +659,31 @@ export async function updateListing(
     },
     // Media is fully replaced on save — the editor always submits the final set.
     { sql: "DELETE FROM listing_images WHERE listing_id = ?", args: [listingId] },
-    { sql: "DELETE FROM listing_variants WHERE listing_id = ?", args: [listingId] },
+
   ];
 
   statements.push(...imageStatements(listingId, input.images));
 
-  // Variants carry stock, so deleting and re-inserting them would lose the
-  // audit trail unless the delta is recorded.
-  const previousVariants = await listListingVariants(listingId);
-  const previousStockByKey = new Map(
-    previousVariants.map((variant) => [variant.name.toLowerCase(), Number(variant.stock)]),
-  );
-  statements.push(...variantStatements(listingId, input.variants));
+  // Keep stable option identities for carts, purchased items and stock history.
+  for (const previous of previousVariants) {
+    if (!submittedIds.includes(previous.id)) {
+      statements.push({ sql: "DELETE FROM listing_variants WHERE id = ? AND listing_id = ?", args: [previous.id, listingId] });
+    }
+  }
+  input.variants.forEach((variant, position) => {
+    if (!variant.id) {
+      statements.push(...variantStatements(listingId, [variant]).map(statement => {
+        statement.args![7] = position;
+        return statement;
+      }));
+      return;
+    }
+    statements.push({
+      sql: "UPDATE listing_variants SET name = ?, sku = ?, price = ?, stock = ?, attributes = ?, position = ? WHERE id = ? AND listing_id = ?",
+      args: [variant.name.trim().slice(0, 80), variant.sku?.trim() || null, variant.price ?? null, variant.stock,
+        variant.attributes ? JSON.stringify(variant.attributes) : null, position, variant.id, listingId],
+    });
+  });
 
   if (input.trackInventory && stockDelta !== 0) {
     statements.push({
@@ -665,7 +696,7 @@ export async function updateListing(
 
   for (const variant of input.variants) {
     if (!input.trackInventory) continue;
-    const previous = previousStockByKey.get(variant.name.toLowerCase());
+    const previous = variant.id ? Number(previousById.get(variant.id)?.stock) : undefined;
     if (previous === undefined || previous === variant.stock) continue;
     const delta = variant.stock - previous;
     if (delta === 0) continue;
@@ -693,12 +724,6 @@ export async function updateListing(
 
 function buildAttributes(input: ListingInput): string | null {
   const attributes = { ...(input.attributes ?? {}) };
-  if (input.type === "food" && input.prepTimeMinutes) {
-    attributes.prepTimeMinutes = input.prepTimeMinutes;
-  }
-  if (input.type === "service" && input.durationMinutes) {
-    attributes.durationMinutes = input.durationMinutes;
-  }
   return Object.keys(attributes).length > 0 ? JSON.stringify(attributes) : null;
 }
 
@@ -760,6 +785,14 @@ export async function setListingStatus(input: {
   const existing = await getOwnedListing(input.listingId, input.storeId);
   if (!existing) return { ok: false, error: "Listing not found." };
 
+  if (!["draft", "active", "archived"].includes(input.status)) return { ok: false, error: "Choose a valid status." };
+  if (input.status === "active") {
+    const detail = await getListingDetail(input.listingId);
+    if (!detail?.categoryId) return { ok: false, error: "Open Edit Product and choose a category before publishing." };
+    const category = await queryOne<{ name: string; slug: string }>("SELECT name, slug FROM categories WHERE id = ? AND kind = 'product' AND (store_id IS NULL OR store_id = ?)", [detail.categoryId, input.storeId]);
+    if (!category || !isSupportedCategory(category)) return { ok: false, error: "Open Edit Product and choose a current category before publishing." };
+    if (!detail.images.length) return { ok: false, error: "Open Edit Product and add a photo before publishing." };
+  }
   const timestamp = nowIso();
   await execute(
     `UPDATE listings SET status = ?, published_at = ?, updated_at = ? WHERE id = ? AND store_id = ?`,
@@ -804,69 +837,6 @@ export async function setListingFeatured(input: {
     input.storeId,
   ]);
   return { ok: true };
-}
-
-// --- Digital assets ---------------------------------------------------------
-
-export async function addDigitalAsset(input: {
-  listingId: string;
-  storeId: string;
-  key: string;
-  fileName: string;
-  contentType: string;
-  size: number;
-}): Promise<{ ok: boolean; error?: string }> {
-  const listing = await getOwnedListing(input.listingId, input.storeId);
-  if (!listing) return { ok: false, error: "Listing not found." };
-
-  const latest = await queryOne<{ version: number }>(
-    "SELECT COALESCE(MAX(version), 0) + 1 AS version FROM digital_assets WHERE listing_id = ?",
-    [input.listingId],
-  );
-
-  await execute(
-    `INSERT INTO digital_assets (id, listing_id, storage_key, file_name, content_type, file_size, version, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      newId("asset"),
-      input.listingId,
-      input.key,
-      input.fileName,
-      input.contentType,
-      input.size,
-      latest?.version ?? 1,
-      nowIso(),
-    ],
-  );
-  return { ok: true };
-}
-
-export async function removeDigitalAsset(input: {
-  assetId: string;
-  storeId: string;
-}): Promise<{ ok: boolean; error?: string }> {
-  const asset = await queryOne<DigitalAssetRow & { store_id: string }>(
-    `SELECT a.*, l.store_id FROM digital_assets a
-     JOIN listings l ON l.id = a.listing_id
-     WHERE a.id = ? AND l.store_id = ?`,
-    [input.assetId, input.storeId],
-  );
-  if (!asset) return { ok: false, error: "File not found." };
-
-  await execute("DELETE FROM digital_assets WHERE id = ?", [input.assetId]);
-  return { ok: true };
-}
-
-export async function getDigitalAssetForStore(
-  assetId: string,
-  storeId: string,
-): Promise<DigitalAssetRow | null> {
-  return queryOne<DigitalAssetRow>(
-    `SELECT a.* FROM digital_assets a
-     JOIN listings l ON l.id = a.listing_id
-     WHERE a.id = ? AND l.store_id = ?`,
-    [assetId, storeId],
-  );
 }
 
 // --- Inventory --------------------------------------------------------------

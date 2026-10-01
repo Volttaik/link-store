@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 
 import {
   Avatar,
@@ -68,6 +69,7 @@ export function WorkspaceShell({
   store,
   nav,
   contextData = null,
+  productCategories = [],
   homeHref,
   label = "Workspace",
   children,
@@ -75,6 +77,7 @@ export function WorkspaceShell({
   user: SessionUser;
   store: StoreSummary;
   nav: WorkspaceNavItem[];
+  productCategories?: Array<{ id: string; name: string }>;
   /** Real per-section data for the display. Omit for a menu-only shell. */
   contextData?: WorkspaceContextData | null;
   homeHref: string;
@@ -187,7 +190,7 @@ export function WorkspaceShell({
           <p className="text-[10.5px] font-semibold tracking-[0.16em] text-muted uppercase">
             {store ? "Your workspace" : label}
           </p>
-          <p className="mt-1.5 truncate text-[17px] leading-tight font-semibold tracking-tight text-foreground">
+          <p className="mt-1.5 truncate text-[15px] leading-tight font-semibold tracking-tight text-foreground">
             {user.name}
           </p>
         </div>
@@ -390,6 +393,10 @@ export function WorkspaceShell({
               SECTION A. */}
           {contextData && displayItem ? (
             <div data-area="display">
+            {displayItem.context === "listing" && productCategories.length ? <nav aria-label="Manage products by category" className="mb-4 flex flex-col gap-1">
+              <Link href="/workspace/listings" className="rounded-lg px-3 py-2 text-xs font-semibold" onClick={onNavigate}>All Products</Link>
+              {productCategories.map(category => <Link key={category.id} href={`/workspace/listings?category=${encodeURIComponent(category.id)}`} aria-current={searchParams.get("category") === category.id ? "page" : undefined} onClick={onNavigate} className={`rounded-lg px-3 py-2 text-xs hover:bg-surface-secondary ${searchParams.get("category") === category.id ? "bg-surface-secondary font-semibold" : "text-muted"}`}>{category.name}</Link>)}
+            </nav> : null}
             <WorkspaceSectionDisplay
               key={displayItem.key}
               contextData={contextData}
@@ -419,6 +426,9 @@ export function WorkspaceShell({
       const { signOutAction } = await import("@/app/actions/auth");
       try {
         await signOutAction();
+        const { resetChatRealtime } = await import("@/lib/chat/realtime");
+        resetChatRealtime();
+        window.dispatchEvent(new Event("rush-cart:signed-out"));
         // In place: the revalidated layouts render the signed-out experience
         // and the router lands on the marketplace home — no browser reload.
         router.push("/");

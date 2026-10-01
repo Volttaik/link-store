@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Keep audit production builds separate from a running workspace dev server.
+  distDir: process.env.NEXT_BUILD_DIR || ".next",
+  outputFileTracingIncludes: { "/*": ["./public/brand/rush-cart-logo.png"] },
 
   // libSQL ships a native binding for local file databases, and the AWS SDK
   // resolves credentials at runtime — neither should be bundled by the compiler.

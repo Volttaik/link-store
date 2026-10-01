@@ -7,7 +7,7 @@ import { queryOne } from "@/lib/db";
 import { refundOrder, setOrderStatus, verifyReceiptCode } from "@/lib/server/commerce";
 import { resendOrderEmails } from "@/lib/server/email";
 import { updateShipment, type ShipmentStatus } from "@/lib/server/shipments";
-import { normaliseReceiptCode } from "@/lib/tickets";
+import { normaliseReceiptCode } from "@/lib/receipts";
 import { fail, ok, type ActionResult } from "@/lib/types";
 import type { OrderStatus } from "@/lib/types";
 

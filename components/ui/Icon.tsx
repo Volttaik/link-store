@@ -1,5 +1,5 @@
 /**
- * The LINK STORE icon set.
+ * The Rush Cart icon set.
  *
  * HeroUI's own components and documentation use `@gravity-ui/icons`, so Link
  * Store uses the same library — one consistent, monochrome, 16px-grid icon
@@ -306,61 +306,25 @@ export function Icon({
  * nothing behind it. `className` sets the mark's real size — it is deliberately
  * large by default, because it is the primary logo.
  */
-export function BrandMark({ className = "size-8" }: { className?: string }) {
+export function BrandMark({ className = "h-7 w-12" }: { className?: string }) {
   return (
-    <svg
-      aria-hidden="true"
-      className={className}
-      fill="none"
-      focusable="false"
-      viewBox="0 0 16 16"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <defs>
-        {/**
-         * The mark's treatment, exactly as the design system prescribes: strong
-         * dark elements, one controlled accent, and a *subtle* gradient — the
-         * accent trio across the glyph: light violet mixed with a touch of dark
-         * violet, then amber milk. No background and no frame: clean geometry
-         * alone carries it, and the dark start keeps it instantly legible at
-         * 16px. The stops are the shared `--ls-*` tokens (via the `.ls-grad-*`
-         * classes), so the logo follows the theme with no second palette.
-         */}
-        <linearGradient
-          gradientUnits="userSpaceOnUse"
-          id="ls-logo"
-          x1="1.5"
-          x2="14.5"
-          y1="13.5"
-          y2="2.5"
-        >
-          <stop className="ls-grad-iris-deep" offset="0" />
-          <stop className="ls-grad-iris" offset="0.5" />
-          <stop className="ls-grad-milk" offset="1" />
-        </linearGradient>
-      </defs>
-      {/* The exact link glyph, kept — only its treatment changes. */}
-      <path
-        clipRule="evenodd"
-        d="M3.47 6.53a.75.75 0 0 1 1.06 1.061l-.727.727a2.743 2.743 0 0 0 3.879 3.879l.727-.727a.75.75 0 0 1 1.06 1.06l-.726.727a4.243 4.243 0 0 1-6-6zm8 1.879a.75.75 0 0 0 1.06 1.06l.727-.726a4.243 4.243 0 0 0-6-6l-.727.727a.75.75 0 0 0 1.061 1.06l.727-.727a2.743 2.743 0 0 1 3.879 3.879zm-.94-1.879a.75.75 0 1 0-1.06-1.06l-4 4a.75.75 0 1 0 1.06 1.06z"
-        fill="url(#ls-logo)"
-        fillRule="evenodd"
-      />
-    </svg>
+    // The supplied asset is contained, never stretched or cropped.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img alt="Rush Cart" className={`object-contain ${className}`} src="/brand/rush-cart-logo.png" />
   );
 }
 
 /**
  * The wordmark, set in text rather than an image.
  *
- * `LINK` is the strong dark element; `STORE` carries the one controlled accent —
+ * `Rush` is the strong dark element; `Cart` carries the one controlled accent —
  * the touch of dark violet from the trio. Type only: no background, no frame,
  * readable at every size.
  */
 export function Wordmark({ className = "" }: { className?: string }) {
   return (
     <span className={`text-[15px] font-semibold tracking-tight ${className}`}>
-      LINK <span className="ls-wordmark-accent">STORE</span>
+      Rush <span className="ls-wordmark-accent">Cart</span>
     </span>
   );
 }

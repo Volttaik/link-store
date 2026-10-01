@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, Modal, SearchField, useOverlayState } from "@heroui/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Icon } from "@/components/ui/Icon";
 import { SelectField } from "@/components/ui/field";
@@ -25,6 +25,8 @@ export function StoreFilters() {
   const { searchParams, update, isFiltering } = useUrlState("/stores");
   const [term, setTerm] = useState(searchParams.get("q") ?? "");
   const filters = useOverlayState();
+  const queryTerm = searchParams.get("q") ?? "";
+  useEffect(() => setTerm(queryTerm), [queryTerm]);
 
   const activeSort = searchParams.get("sort") ?? "newest";
   const activeCategory = searchParams.get("category") ?? "all";
@@ -56,7 +58,7 @@ export function StoreFilters() {
             name="q"
             value={term}
             variant="secondary"
-            onChange={setTerm}
+            onChange={value => { setTerm(value); if (!value) update({ q: null }); }}
           >
             <SearchField.Group>
               <SearchField.SearchIcon />
@@ -119,7 +121,7 @@ export function StoreFilters() {
                   label="Category"
                   options={categoryOptions}
                   value={activeCategory}
-                  onChange={(value) => update({ category: value === "all" ? null : String(value) })}
+                  onChange={(value) => update({ category: !value || value === "all" ? null : value })}
                 />
               </Modal.Body>
 

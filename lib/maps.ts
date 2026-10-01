@@ -73,7 +73,7 @@ export async function geocode(place: string): Promise<{ lat: number; lng: number
 
     const response = await fetch(url, {
       signal: controller.signal,
-      headers: { "User-Agent": "LinkStore/1.0 (shipment tracking)" },
+      headers: { "User-Agent": "RushCart/1.0 (shipment tracking)" },
       cache: "no-store",
     });
     if (!response.ok) return null;

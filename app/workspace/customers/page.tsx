@@ -92,7 +92,7 @@ export default async function CustomersPage() {
       ) : (
         <section className="space-y-3">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <h2 className="text-[16px] font-semibold tracking-tight text-foreground">
+            <h2 className="text-[15px] font-semibold tracking-tight text-foreground">
               By lifetime value
             </h2>
             <p className="text-[12.5px] text-muted">
@@ -146,7 +146,7 @@ export default async function CustomersPage() {
                   </div>
 
                   <div className="shrink-0 text-right">
-                    <p className="text-[17px] leading-tight font-semibold tabular-nums text-foreground">
+                    <p className="text-[15px] leading-tight font-semibold tabular-nums text-foreground">
                       {formatMoney(spent, store.currency)}
                     </p>
                     <p className="mt-0.5 text-[12.5px] text-muted">
@@ -166,7 +166,7 @@ export default async function CustomersPage() {
 
       {recentOrders.length > 0 ? (
         <section className="space-y-3">
-          <h2 className="text-[16px] font-semibold tracking-tight text-foreground">
+          <h2 className="text-[15px] font-semibold tracking-tight text-foreground">
             Latest paid orders
           </h2>
 

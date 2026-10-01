@@ -1,4 +1,4 @@
-import { receiptQrSvg } from "@/lib/tickets";
+import { receiptQrSvg } from "@/lib/receipts";
 
 /**
  * A paid order's receipt QR code, rendered on the server.

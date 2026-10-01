@@ -1,5 +1,6 @@
 node_modules/
 .next/
+.next-ui-audit/
 out/
 build/
 dist/
@@ -37,3 +38,6 @@ env.txt
 .cache/
 .config/
 .local/
+
+# Planning documents (not for the repo)
+DELSAN-feed-refinement-plan.docx

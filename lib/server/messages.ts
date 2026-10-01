@@ -9,6 +9,7 @@
 import "server-only";
 
 import { emitChatEvent } from "./realtime";
+import { sendAccountPush } from "./push";
 import { sendMessageNotificationEmail } from "./email";
 import { execute, query, queryOne } from "../db";
 import { nowIso } from "../format";
@@ -454,7 +455,13 @@ export async function sendMessage(input: {
 
   // A quiet thread waiting for someone earns an email; a live back-and-forth
   // never does. Fire-and-forget: chat must never wait on an inbox.
-  await notifyOfWaitingMessage(created, parties).catch(() => {});
+  await Promise.all([
+    notifyOfWaitingMessage(created, parties).catch(() => {}),
+    sendAccountPush(input.senderUserId === parties.buyerUserId ? parties.storeOwnerId : parties.buyerUserId, {
+      title: "Rush Cart · New message", body: "You have a new message. Open Rush Cart to read it.",
+      url: `/messages/${encodeURIComponent(input.conversationId)}`, tag: `rush-cart:message:${input.conversationId}`,
+    }).catch(() => {}),
+  ]);
 
   return created;
 }

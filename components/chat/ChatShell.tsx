@@ -27,6 +27,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { ChatListHeader } from "@/components/chat/ChatListHeader";
+import { BrowserNotifications } from "@/components/layout/BrowserNotifications";
 import { ConversationList } from "@/components/chat/ConversationList";
 import { subscribeChat } from "@/lib/chat/realtime";
 import type { ThreadSummary } from "@/lib/server/messages";
@@ -57,6 +58,16 @@ export function ChatShell({
       setThreads((current) =>
         current.map((thread) => (thread.id === activeId ? { ...thread, unread: 0 } : thread)),
       );
+      // The matching browser notification is spent too — reading the thread
+      // closes it, so no stale notice is left behind after it was handled.
+      if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+        void navigator.serviceWorker
+          .getRegistration("/")
+          .then((worker) => {
+            worker?.active?.postMessage({ closeTag: `rush-cart:message:${activeId}` });
+          })
+          .catch(() => {});
+      }
     }
   }, [activeId]);
 
@@ -125,13 +136,17 @@ export function ChatShell({
     [],
   );
 
-  const unreadCount = threads.reduce((sum, thread) => sum + (thread.unread > 0 ? 1 : 0), 0);
+  // The same metric everywhere: unread *messages* — matching the header,
+  // the side menu and the navigation badge, so no surface tells a different
+  // story about how much is waiting.
+  const unreadCount = threads.reduce((sum, thread) => sum + (thread.unread > 0 ? thread.unread : 0), 0);
 
   // Phone: one column at a time. Desktop: sidebar and conversation together.
   const onConversation = Boolean(activeId);
 
   return (
     <div className="flex h-full min-h-0 w-full overflow-hidden">
+      <BrowserNotifications userId={user.id} />
       {/* ── Conversation sidebar ─────────────────────────────────────────── */}
       <aside
         className={`min-h-0 w-full shrink-0 flex-col bg-surface lg:flex lg:w-[21.5rem] ${

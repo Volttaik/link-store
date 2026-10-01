@@ -56,9 +56,9 @@ export async function POST(request: Request) {
   // Paystack emits for a completed payment.
   if (payload.event !== "charge.success") {
     const payment = await getPaymentByReference(reference);
-    if (payment && (payload.event === "charge.failed" || payload.event === "transfer.failed")) {
+    if (payment && payment.status !== "success" && payload.event === "charge.failed") {
       await execute(
-        "UPDATE payments SET status = 'failed', failure_reason = ?, updated_at = ? WHERE id = ?",
+        "UPDATE payments SET status = 'failed', failure_reason = ?, updated_at = ? WHERE id = ? AND status != 'success'",
         [payload.event, nowIso(), payment.id],
       );
       // A chat payment card must tell the same story as the ledger.

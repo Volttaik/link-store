@@ -53,7 +53,7 @@ export function AuthLanding({
           className="text-muted no-underline transition-colors hover:text-foreground"
           href="/"
         >
-          Back to LINK STORE
+          Back to Rush Cart
         </Link>
       </p>
     </div>

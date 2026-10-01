@@ -29,7 +29,7 @@ type Heading = { title: string; description: string };
 
 const HEADINGS: Record<AuthStep["kind"], Heading> = {
   "sign-in": {
-    title: "Sign in to LINK STORE",
+    title: "Sign in to Rush Cart",
     description: "Use Google, or the email and password on your account.",
   },
   "sign-up": {
@@ -89,7 +89,7 @@ export function AuthFlow({
           <Switch
             action="Create one"
             onClick={() => onStep({ kind: "sign-up" })}
-            prompt="New to LINK STORE?"
+            prompt="New to Rush Cart?"
           />
         ) : step.kind === "sign-up" ? (
           <Switch

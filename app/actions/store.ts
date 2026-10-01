@@ -52,7 +52,6 @@ export async function createStoreAction(
     state: nullable(formData, "state"),
     country: nullable(formData, "country") ?? "Nigeria",
     logoUrl: nullable(formData, "logoUrl"),
-    bannerUrl: nullable(formData, "bannerUrl"),
   });
 
   if (!result.ok) {
@@ -99,7 +98,6 @@ export async function updateStoreProfileAction(
     state: nullable(formData, "state"),
     country: nullable(formData, "country"),
     logoUrl: nullable(formData, "logoUrl"),
-    bannerUrl: nullable(formData, "bannerUrl"),
     socials: Object.keys(socials).length > 0 ? socials : null,
   });
 
@@ -177,7 +175,7 @@ export async function updateStoreSettingsAction(
 
   const result = await updateStoreSettings(store.id, user.id, {
     lowStockThreshold: Number(str(formData, "lowStockThreshold") || "5"),
-    orderPrefix: str(formData, "orderPrefix") || "LS",
+    orderPrefix: str(formData, "orderPrefix") || "RC",
     shippingFlatFee,
     freeShippingOver,
     deliveryEstimateMinDays: estimateMin,

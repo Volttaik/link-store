@@ -38,7 +38,6 @@ export function CardBuyButton({
   type,
   soldOut,
   variantCount,
-  eventId,
 }: {
   listingId: string;
   /** The listing's own type — never inferred from text. */
@@ -54,21 +53,6 @@ export function CardBuyButton({
   const [added, setAdded] = useState(false);
 
   const action = listingActionMeta(type);
-
-  /* Actions that open the listing (or its event) rather than transacting from
-     the card: a rental is reviewed before anything is agreed, a service is
-     booked from its page, and a ticket is chosen in the ticket picker. */
-  if (action.kind === "open" || action.kind === "book" || action.kind === "ticket") {
-    const href =
-      action.kind === "ticket" && eventId ? `/events/${eventId}` : `/listing/${listingId}`;
-
-    return (
-      <ButtonLink fullWidth href={href} size="sm" variant="primary">
-        <Icon name={action.icon} size={14} />
-        {soldOut && action.kind === "ticket" ? "Sold out" : action.label}
-      </ButtonLink>
-    );
-  }
 
   if (variantCount > 0) {
     return (
@@ -100,9 +84,9 @@ export function CardBuyButton({
     // `w-full` on both: the card's content column does not stretch its children,
     // and the pair is the card's action bar rather than two loose buttons.
     <div className="flex w-full flex-col gap-1">
-      <div className="flex w-full items-center gap-1.5">
+      <div className="product-card-actions flex w-full min-w-0 flex-wrap items-center gap-2">
         <Button
-          className="flex-1"
+          className="min-h-11 min-w-0 flex-1 basis-36"
           isDisabled={soldOut}
           isPending={pending}
           size="sm"
@@ -113,25 +97,17 @@ export function CardBuyButton({
           {soldOut ? "Sold out" : added ? "Added" : action.label}
         </Button>
 
-        <Link
-          href={`/listing/${listingId}`}
-          className="no-underline"
-          aria-label="View product"
-        >
-          <Button size="sm" variant="ghost">
-            View
-          </Button>
-        </Link>
+        <ButtonLink href={`/listing/${listingId}`} size="sm" variant="ghost" className="min-h-11 flex-1 basis-14">View</ButtonLink>
       </div>
 
       {error ? (
-        <p className="text-[11px] leading-snug text-danger">{error}</p>
+        <p role="alert" className="break-words text-[11px] leading-snug text-danger">{error}</p>
       ) : added ? (
         <Link
           className="text-[11px] text-muted no-underline hover:text-foreground"
           href="/cart"
         >
-          {action.kind === "order" ? "Review order" : "View cart"}
+          View cart
         </Link>
       ) : null}
     </div>

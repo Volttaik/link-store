@@ -295,6 +295,7 @@ export type ListingCardData = {
   currency: string;
   imageUrl: string | null;
   categoryName: string | null;
+  categoryId?: string | null;
   status: string;
   stock: number;
   trackInventory: boolean;
@@ -401,16 +402,9 @@ export type EventCardData = {
   country: string | null;
   isOnline: boolean;
   status: string;
-  minPrice: number | null;
   currency: string;
-  /** Tickets still on sale. */
-  ticketsAvailable: number;
-  /** Tickets sold, across every type. */
-  ticketsSold: number;
-  /** Tickets put up for sale, across every type. */
-  ticketsTotal: number;
-  /** Tickets scanned at the door. */
-  checkedIn: number;
+  products: ListingCardData[];
+  productCount: number;
 };
 
 export type EventDetail = EventCardData & {
@@ -419,7 +413,7 @@ export type EventDetail = EventCardData & {
   state: string | null;
   onlineUrl: string | null;
   capacity: number | null;
-  ticketTypes: TicketTypeRow[];
+  productIds: string[];
   storeLogoUrl: string | null;
   storeTagline: string | null;
 };
@@ -531,7 +525,7 @@ export type OrderRow = {
   access_token: string;
   source: string;
   /** How the buyer gets their goods: delivery | pickup | digital | none. */
-  fulfilment_method: "delivery" | "pickup" | "digital" | "none";
+  fulfilment_method: "delivery" | "pickup" | "none";
   /** The delivery estimate as it stood at purchase — "3–5 days", not a promise. */
   estimated_delivery: string | null;
   /** Opaque receipt identifier — what the receipt's QR encodes. */

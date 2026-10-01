@@ -1,14 +1,17 @@
 import { Suspense } from "react";
 
+import { BrowserNotifications } from "@/components/layout/BrowserNotifications";
 import { LiveUpdates } from "@/components/layout/LiveUpdates";
 import { WorkspaceShell } from "@/components/workspace/WorkspaceShell";
 import { ContentSpinner } from "@/components/ui/controls";
 import { requireUser, getStoreForUser } from "@/lib/auth";
 import { getWorkspaceContextData } from "@/lib/server/context";
+import { flattenCategoryTree } from "@/lib/categories";
+import { listMainCategories } from "@/lib/server/categories";
 import { WORKSPACE_NAV } from "@/lib/workspace-nav";
 
 export const metadata = {
-  title: { default: "Workspace", template: "%s · Workspace · LINK STORE" },
+  title: { default: "Workspace", template: "%s · Workspace · Rush Cart" },
 };
 
 export const dynamic = "force-dynamic";
@@ -28,13 +31,15 @@ export default async function WorkspaceLayout({
   // products, orders, stock, customers and money — in one parallel round. No
   // store means no sections to preview, so the shell stays a menu-only panel.
   const contextData = store ? await getWorkspaceContextData(store, user.id) : null;
+  const productCategories = store ? await listMainCategories() : [];
 
   return (
     // This boundary only covers resolving the session and the seller's store —
     // once the shell is mounted it stays put, and page-level loading is handled
     // by `loading.tsx` inside the content area.
     <Suspense fallback={<ContentSpinner className="min-h-dvh" />}>
-      <LiveUpdates enabled />
+      <LiveUpdates enabled userId={user.id} />
+      <BrowserNotifications userId={user.id} />
       <WorkspaceShell
         user={user}
         store={
@@ -43,6 +48,7 @@ export default async function WorkspaceLayout({
             : null
         }
         nav={WORKSPACE_NAV}
+        productCategories={flattenCategoryTree(productCategories).map(({ id, name }) => ({ id, name }))}
         contextData={contextData}
         homeHref="/"
       >

@@ -82,7 +82,7 @@ export type DashboardMetrics = {
   catalogue: { active: number; draft: number; outOfStock: number; lowStock: number };
   traffic: { storeViews: number; listingViews: number; last30Days: number };
   conversion: { rate: number | null; cartAdds: number; checkouts: number; purchases: number };
-  events: { published: number; upcoming: number; ticketsSold: number };
+  events: { published: number; upcoming: number; products: number };
   /** Units sold, summed from order items on paid orders. */
   units: { last30Days: number; total: number };
   /** Sparse: only days that actually took a payment. */
@@ -190,13 +190,11 @@ export async function getDashboardMetrics(
       [storeId],
     ),
 
-    queryOne<{ published: number; upcoming: number; tickets_sold: number }>(
+    queryOne<{ published: number; upcoming: number; products: number }>(
       `SELECT
          COALESCE(SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END), 0) AS published,
          COALESCE(SUM(CASE WHEN status = 'published' AND starts_at >= ? THEN 1 ELSE 0 END), 0) AS upcoming,
-         COALESCE((SELECT SUM(t.quantity_sold) FROM ticket_types t
-                    JOIN events e2 ON e2.id = t.event_id
-                    WHERE e2.store_id = ?), 0) AS tickets_sold
+         COALESCE((SELECT COUNT(*) FROM event_products ep JOIN events e2 ON e2.id = ep.event_id WHERE e2.store_id = ?), 0) AS products
        FROM events WHERE store_id = ?`,
       [nowIso(), storeId, storeId],
     ),
@@ -317,7 +315,7 @@ export async function getDashboardMetrics(
     events: {
       published: Number(eventStats?.published ?? 0),
       upcoming: Number(eventStats?.upcoming ?? 0),
-      ticketsSold: Number(eventStats?.tickets_sold ?? 0),
+      products: Number(eventStats?.products ?? 0),
     },
     units: {
       last30Days: Number(unitsSold?.last30 ?? 0),

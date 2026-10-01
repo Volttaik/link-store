@@ -236,7 +236,7 @@ export function SelectField({
       {label ? <Label>{label}</Label> : null}
 
       <Select.Trigger>
-        <Select.Value />
+        <Select.Value>{options.find(option => option.value === selectedKey)?.label ?? placeholder}</Select.Value>
         <Select.Indicator />
       </Select.Trigger>
 

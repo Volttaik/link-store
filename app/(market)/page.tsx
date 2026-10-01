@@ -1,4 +1,3 @@
-import { SearchField } from "@heroui/react/search-field";
 import { Suspense } from "react";
 
 import { BrowseCategories } from "@/components/marketplace/BrowseCategories";
@@ -11,10 +10,8 @@ import { ButtonLink } from "@/components/ui/controls";
 import { EmptyState, OpenLink } from "@/components/ui/feedback";
 import { Icon } from "@/components/ui/Icon";
 import { SearchForm } from "@/components/ui/SearchForm";
+import { RushFeatureCube } from "@/components/visual/RushFeatureCube";
 import { AdaptiveTint } from "@/components/visual/AdaptiveTint";
-import { DepthLayer, GradientField, ThreeOrbs } from "@/components/visual/Atmosphere";
-import { Letter3D } from "@/components/visual/Letter3D";
-import { RotatingWord } from "@/components/visual/RotatingWord";
 import { getCurrentUser } from "@/lib/auth";
 import { buildCategoryTree, flattenCategoryTree, type CategoryNode } from "@/lib/categories";
 import { categoryIconName } from "@/lib/catalog";
@@ -33,9 +30,9 @@ export const dynamic = "force-dynamic";
  * gallery of three listings and an action. They are wider than a product card
  * and never shrink to fit — extra shops continue off-screen.
  */
-const SHOP_ITEM_CLASS = "w-[21rem] shrink-0 snap-start sm:w-[25rem] lg:w-[26rem]";
+const SHOP_ITEM_CLASS = "w-[calc(100vw-3rem)] shrink-0 snap-start sm:w-[36rem] lg:w-[46rem]";
 /** Events are a grid, not a rail: there are usually only a few, each is a date. */
-const EVENT_GRID = "grid grid-cols-[repeat(auto-fill,minmax(17rem,1fr))] gap-4";
+const EVENT_GRID = "grid grid-cols-1 gap-10 2xl:grid-cols-2";
 
 /**
  * The public home page.
@@ -85,106 +82,31 @@ export default async function MarketplaceHomePage({
 
   // The branch the shopper is standing in. A child has no children of its own to
   // offer here, so its parent's row stays and the child is what is marked.
-  const narrowedChildren =
-    activeCategory == null
-      ? []
-      : (activeCategory.children.length > 0
-          ? activeCategory.children
-          : (categoryTree.find((root) =>
-              flattenCategoryTree([root]).some((node) => node.id === activeCategory.id),
-            )?.children ?? []));
+
 
   return (
     <div className="relative isolate">
-      {/* Hero — the welcome, and the shopper's one action: search. */}
-      <section className="relative isolate overflow-hidden">
-        {/* The hero's quiet environment: a light foundation, one soft tonal
-            variation, a careful dark-purple depth span, and small geometric SVG
-            accents. All four layers are out of flow at `-z-*` behind the copy,
-            so they can never push or resize the content above them. */}
-        <GradientField className="absolute inset-0 -z-20" opacity={0.85} />
-        <DepthLayer className="absolute inset-0 -z-20" opacity={0.6} />
-        {/* The three-orb motif, big, at the top right — the hero's one piece
-            of decorative SVG. No other accent shares that corner. */}
-        <ThreeOrbs className="ls-orb-float absolute -top-2 -right-10 -z-10 h-[24rem] w-[24rem] sm:top-2 sm:-right-16 sm:h-[34rem] sm:w-[34rem]" />
-
-        <div className="mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 sm:py-28">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted">
-            LINK STORE
-          </p>
-
-          {/* The first line is a 3D element: extruded lettering in the accent
-              trio, drawn as SVG so it reads as an object, not as text. */}
-          <h1 className="mt-5 max-w-3xl">
-            <Letter3D className="w-full max-w-[34rem] sm:max-w-[42rem]" text="Welcome to Link Store" />
-          </h1>
-
-          {/* The second line, small and designed: a compact chip where the
-              category word turns through the accent trio. The promise, in
-              miniature and always in motion — it never crowds the lettering. */}
-          <p className="mt-4 inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-full bg-surface px-3.5 py-1.5 text-[12.5px] font-medium text-muted shadow-elev-1 sm:text-[13px]">
-            <span aria-hidden="true">
-              Everything you sell,{" "}
-              <RotatingWord words={["products", "fashion", "food", "tickets", "services"]} />, one{" "}
-              <span className="font-semibold text-foreground">link</span> away.
-            </span>
-            <span className="sr-only">
-              Everything you sell: products, fashion, food, tickets and services. One link away.
-            </span>
-          </p>
-
-          <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-muted">
-            Products, fashion, food, services, tickets, digital files — your whole world of selling
-            lives at one beautiful address. Customers find everything you offer in one place and check
-            out in seconds.
-          </p>
-
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            {/* The hero's call to action: a neutral button with the accent trio
-                running around its edge. */}
-            {user ? (
-              <ButtonLink className="ls-edge" href="/workspace" variant="primary" size="md">
-                Open your workspace
-              </ButtonLink>
-            ) : (
-              <ButtonLink className="ls-edge" href="/sign-up" variant="primary" size="md">
-                Create your store
-              </ButtonLink>
-            )}
-          </div>
-
-          {/* Search is the shopper's own way in, and the header repeats it at
-              desktop widths — so the hero keeps it and nothing else duplicates it. */}
-          <SearchForm action="/search" className="mt-10 flex max-w-md items-center gap-2">
-            <SearchField aria-label="Search the marketplace" name="q" variant="secondary">
-              <SearchField.Group>
-                <SearchField.SearchIcon />
-                <SearchField.Input
-                  className="w-full min-w-0"
-                  placeholder="Search products, stores and events"
-                />
-                <SearchField.ClearButton />
-              </SearchField.Group>
-            </SearchField>
+      {/* Rush Cart: a short discovery path that arrives, then rests. */}
+      <section className="rush-hero relative isolate mx-auto grid max-w-7xl items-center gap-8 px-4 py-9 sm:px-6 sm:py-12 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="rush-atmosphere pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden="true"><span className="rush-orb rush-orb-one" /></div>
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Rush Cart</p>
+          <div className="rush-headline relative mt-4 max-w-xl"><h1 className="rush-gradient rush-brand-headline">Get what you want<br /><span className="rush-headline-finish">quick and easy.</span></h1><span className="rush-trail" aria-hidden="true" /></div>
+          <SearchForm action="/search" className="mt-6 flex max-w-lg items-center gap-2" buttonClassName="min-h-12 rounded-full px-5" label="Find it">
+            <label className="flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-full bg-surface-secondary px-4 ring-1 ring-transparent focus-within:ring-accent"><Icon name="search" size={18} className="shrink-0 text-muted" /><input aria-label="Search the marketplace" name="q" type="search" enterKeyHint="search" placeholder="What are you looking for?" className="min-w-0 flex-1 bg-transparent py-3 text-base outline-none" /></label>
           </SearchForm>
-
+          <div className="mt-5 flex flex-wrap gap-3"><ButtonLink href="/products" variant="primary" className="rounded-full">Explore Marketplace<Icon name="arrowRight" size={16} /></ButtonLink><ButtonLink href="/stores" variant="ghost" className="rounded-full">Find a shop</ButtonLink></div>
         </div>
+        <RushFeatureCube />
       </section>
 
       {/* Category discovery — one control, and the segment it currently means.
           Separated from the hero by tonal contrast and spacing alone. */}
-      <section className="bg-surface-secondary/45">
+      <section>
         <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-4 sm:px-6">
           <BrowseCategories
-            activeName={activeCategory?.name ?? null}
             activeSlug={activeCategory?.slug ?? null}
-            categories={categoryTree.map((category) => ({
-              id: category.id,
-              name: category.name,
-              slug: category.slug,
-              icon: category.icon,
-            }))}
-            children={narrowedChildren.map((category) => ({
+            categories={flattenCategoryTree(categoryTree).map((category) => ({
               id: category.id,
               name: category.name,
               slug: category.slug,
@@ -192,18 +114,9 @@ export default async function MarketplaceHomePage({
             }))}
           />
 
-          <p className="text-xs text-muted">
-            {activeCategory ? (
-              <>
-                The marketplace reorganised around{" "}
-                <span className="font-medium text-foreground">{activeCategory.name}</span>.
-              </>
-            ) : (
-              "Pick a category to reorganise the marketplace around it, or browse everything."
-            )}
-          </p>
         </div>
       </section>
+
 
       {/* A quiet word when the marketplace turns to face a category. */}
       <ContextNotice
@@ -237,12 +150,12 @@ export default async function MarketplaceHomePage({
             {
               icon: "products" as const,
               title: "Add what you sell",
-              body: "Products, menus, services, events and digital files all live in one catalogue.",
+              body: "Your products live in one catalogue. Events bring them together into curated collections.",
             },
             {
               icon: "creditCard" as const,
               title: "Get paid",
-              body: "Checkout runs on Paystack and every payment is verified on the server before fulfilment.",
+              body: "Secure checkout with Paystack. Receive confirmed orders and keep buyers updated.",
             },
           ].map((step) => (
             <div key={step.title} className="flex flex-col gap-2">
@@ -274,7 +187,7 @@ async function HomeMarketplace({ user }: { user: SessionUser | null }) {
         <EmptyState
           icon="storefront"
           title="The marketplace is just getting started"
-          description="No seller has published a listing yet, so there is genuinely nothing to show here rather than placeholder products. Create your storefront, add what you sell, and it appears on this page immediately."
+          description="Discover new products as stores open. Ready to sell? Create your storefront and publish your first product."
           action={
             <ButtonLink href={user ? "/workspace" : "/sign-up"} variant="primary" size="sm">
               {user ? "Create your storefront" : "Create your account"}
@@ -292,7 +205,7 @@ async function HomeMarketplace({ user }: { user: SessionUser | null }) {
         <section className="space-y-6">
           <SectionHeader
             title="Marketplace"
-            description="The newest listings from sellers across Link Store."
+            description="Good finds from independent shops across Rush Cart."
             action={<OpenLink href="/products">Open Marketplace</OpenLink>}
           />
           <ProductRail label="Marketplace listings">
@@ -307,7 +220,7 @@ async function HomeMarketplace({ user }: { user: SessionUser | null }) {
         <section className="space-y-6">
           <SectionHeader
             title="Shops"
-            description="Every listing belongs to a seller. These are the shops behind them."
+            
             action={<OpenLink href="/stores">Open Shops</OpenLink>}
           />
           <ProductRail itemClassName={SHOP_ITEM_CLASS} label="Shops">
@@ -321,8 +234,8 @@ async function HomeMarketplace({ user }: { user: SessionUser | null }) {
       {home.events.length > 0 ? (
         <section className="space-y-6">
           <SectionHeader
-            title="Upcoming events"
-            description="Concerts, workshops and conferences with tickets on sale."
+            title="Events"
+            description="Product collections from shops on Rush Cart."
             action={<OpenLink href="/events">Open Events</OpenLink>}
           />
           <div className={EVENT_GRID}>
@@ -379,12 +292,12 @@ async function CategoryMarketplace({ category }: { category: CategoryNode }) {
           <section className="space-y-6 motion-safe:animate-rise">
             <SectionHeader
               title={`Shops selling ${category.name}`}
-              description="Open a shop to see everything that seller offers."
+              
               action={
                 <OpenLink href={`/stores?category=${category.slug}`}>Open Shops</OpenLink>
               }
             />
-            <ProductRail itemClassName={SHOP_ITEM_CLASS} label={`${category.name} shops`} stagger>
+            <ProductRail itemClassName={SHOP_ITEM_CLASS} label={`${category.name} shops`}>
               {stores.map((store) => (
                 <ShopCard key={store.id} store={store} />
               ))}
@@ -396,7 +309,7 @@ async function CategoryMarketplace({ category }: { category: CategoryNode }) {
           <section className="space-y-6 motion-safe:animate-rise">
             <SectionHeader
               title={`${category.name} events`}
-              description="Tickets on sale in this part of the marketplace."
+              description="Curated product collections in this category."
               action={<OpenLink href="/events">Open Events</OpenLink>}
             />
             <div className={EVENT_GRID}>

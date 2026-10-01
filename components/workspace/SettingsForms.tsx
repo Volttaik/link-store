@@ -45,7 +45,6 @@ export function StoreProfileForm({
     state: string | null;
     country: string | null;
     logo_url: string | null;
-    banner_url: string | null;
     socials: Record<string, string>;
   };
 }) {
@@ -54,7 +53,6 @@ export function StoreProfileForm({
     null,
   );
   const [logoUrl, setLogoUrl] = useState<string | null>(store.logo_url);
-  const [bannerUrl, setBannerUrl] = useState<string | null>(store.banner_url);
 
   return (
     <form action={formAction} className="space-y-5">
@@ -160,21 +158,6 @@ export function StoreProfileForm({
           <input name="logoUrl" type="hidden" value={logoUrl ?? ""} />
         </div>
 
-        <div className="space-y-1.5">
-          <p className="text-sm font-medium">Shop cover</p>
-          <p className="text-xs text-muted">
-            The wide image behind your shop&apos;s identity — name, logo and details sit on top of
-            it.
-          </p>
-          <SingleImageUploader
-            value={bannerUrl}
-            onChange={(image) => setBannerUrl(image?.url ?? null)}
-            folder="store"
-            label="Upload cover"
-            previewClassName="h-16 w-28"
-          />
-          <input name="bannerUrl" type="hidden" value={bannerUrl ?? ""} />
-        </div>
       </div>
 
       <div className="grid gap-5 sm:grid-cols-3">
@@ -223,7 +206,7 @@ export function PublishToggle({ isPublished }: { isPublished: boolean }) {
   return (
     <div className="flex flex-col gap-3">
       <SwitchField
-        description="A hidden storefront is still reachable by direct link, but it is not listed in the marketplace."
+        description="A hidden storefront is visible only to you. Publish it when you are ready for customers."
         isDisabled={pending}
         isSelected={isPublished}
         name="isPublished"
@@ -297,7 +280,7 @@ export function StoreRulesForm({
       <div className="grid gap-5 sm:grid-cols-2">
         <Field
           defaultValue={settings.order_prefix}
-          description="Used at the start of every order number, e.g. LS-0001."
+          description="Used at the start of every order number, e.g. RC-0001."
           label="Order prefix"
           name="orderPrefix"
         />
@@ -615,6 +598,12 @@ export function SignOutAllDevices() {
             const { signOutEverywhereAction } = await import("@/app/actions/auth");
             const result = await signOutEverywhereAction();
             setMessage(result.message);
+            if (result.ok) {
+              const { resetChatRealtime } = await import("@/lib/chat/realtime");
+              resetChatRealtime();
+              window.dispatchEvent(new Event("rush-cart:signed-out"));
+              router.replace("/");
+            }
             router.refresh();
           })
         }

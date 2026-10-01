@@ -15,12 +15,15 @@ export function ChatAvatar({
   src,
   size = 44,
   className = "",
+  fit = "cover",
 }: {
   name: string;
   src?: string | null;
   /** Diameter in pixels — the sidebar uses 44, the thread 36. */
   size?: number;
   className?: string;
+  /** Logos fit inside the established profile frame without cropping. */
+  fit?: "cover" | "contain";
 }) {
   const initial = (name.trim().slice(0, 1) || "?").toUpperCase();
 
@@ -31,7 +34,7 @@ export function ChatAvatar({
       style={{ width: size, height: size, fontSize: Math.round(size * 0.38) }}
     >
       {src ? (
-        <img alt="" className="h-full w-full object-cover" loading="lazy" src={src} />
+        <img alt="" className={`h-full w-full ${fit === "contain" ? "object-contain p-1" : "object-cover"}`} loading="lazy" src={src} />
       ) : (
         <span className="font-semibold">{initial}</span>
       )}

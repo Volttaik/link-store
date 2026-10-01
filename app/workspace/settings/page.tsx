@@ -101,7 +101,6 @@ export default async function SettingsPage({
                   state: store.state,
                   country: store.country,
                   logo_url: store.logo_url,
-                  banner_url: store.banner_url,
                   socials: storeSocials(store),
                 }}
               />
@@ -168,7 +167,7 @@ export default async function SettingsPage({
             <Card.Header className="flex-col items-start gap-1">
               <h2 className="text-lg font-semibold">Payout account</h2>
               <p className="text-sm text-muted">
-                Where Link Store sends your settled balance.
+                Where Rush Cart sends your settled balance.
               </p>
             </Card.Header>
             

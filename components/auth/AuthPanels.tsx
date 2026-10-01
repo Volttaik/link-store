@@ -10,6 +10,7 @@
  * the two is one line under the card, never a second navigation.
  */
 
+import Link from "next/link";
 import { Button } from "@heroui/react";
 
 import { OrbLoader } from "@/components/visual/OrbLoader";
@@ -181,12 +182,12 @@ export function SignInPanel({
           />
           {/* The way back in when the password is gone — always beside the
               field that needs remembering, never buried in a footer. */}
-          <a
+          <Link
             className="self-end text-[12px] font-medium text-muted no-underline transition-colors hover:text-foreground"
             href="/forgot-password"
           >
             Forgot password?
-          </a>
+          </Link>
         </div>
 
         <Button fullWidth isDisabled={busy} isPending={pending} size="lg" type="submit" variant="primary">

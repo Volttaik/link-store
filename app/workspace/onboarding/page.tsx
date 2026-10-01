@@ -60,8 +60,8 @@ export default async function OnboardingPage() {
                   else can take your handle once you create the store.
                 </li>
                 <li>
-                  <span className="font-medium text-foreground">2. Add listings.</span> Products, a
-                  food menu, services, events with tickets, or digital files — mix them freely.
+                  <span className="font-medium text-foreground">2. Add products.</span> Set photos,
+                  prices and stock, then curate collections.
                 </li>
                 <li>
                   <span className="font-medium text-foreground">3. Publish.</span> Your storefront goes

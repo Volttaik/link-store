@@ -60,7 +60,7 @@ export default async function WorkspaceDashboardPage() {
       label: "Add your first listing",
       done: totalListings > 0,
       href: "/workspace/listings/new",
-      note: "Products, services, food, digital files or events.",
+      note: "Products and curated product collections.",
     },
     {
       label: "Publish your storefront",
@@ -416,25 +416,25 @@ export default async function WorkspaceDashboardPage() {
           <DashboardCard
             title="Events"
             icon="events"
-            description="Tickets sold across every event you have published."
+            description="Your curated product collections and campaigns."
             action={<OpenLink href="/workspace/events">Open Events</OpenLink>}
           >
-            {metrics.events.published === 0 && metrics.events.ticketsSold === 0 ? (
+            {metrics.events.published === 0 && metrics.events.products === 0 ? (
               <EmptyState
                 compact
                 icon="events"
                 title="No events yet"
-                description="Publish an event and its ticket sales appear here."
+                description="Create an Event and its curated products appear here."
               />
             ) : (
               <FigureGroup columns={2}>
                 <Figure
-                  label="Tickets sold"
-                  value={formatNumber(metrics.events.ticketsSold)}
+                  label="Selected products"
+                  value={formatNumber(metrics.events.products)}
                   hint="Across all of your events"
                 />
                 <Figure
-                  label="Upcoming"
+                  label="Scheduled"
                   value={formatNumber(metrics.events.upcoming)}
                   hint={`${formatNumber(metrics.events.published)} published in total`}
                 />

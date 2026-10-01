@@ -1,13 +1,13 @@
 import { Link } from "@heroui/react/link";
 import { notFound } from "next/navigation";
 
-import { ListingForm } from "@/components/workspace/ListingForm";
+import { ProductCreation } from "@/components/workspace/ProductCreation";
 import { PageHeader } from "@/components/ui/atoms";
 import { Icon } from "@/components/ui/Icon";
 import { InfoNote } from "@/components/ui/feedback";
 import { requireStore } from "@/lib/auth";
 import { categoryPath, flattenCategoryTree } from "@/lib/categories";
-import { listingTypeMeta, type ListingType } from "@/lib/catalog";
+import { type ListingType } from "@/lib/catalog";
 import { listCategoryTree } from "@/lib/server/categories";
 import { workspaceModule } from "@/lib/workspace-modules";
 
@@ -27,13 +27,13 @@ import { workspaceModule } from "@/lib/workspace-modules";
  * (`lib/listing-fields.ts`), so a service is asked for its service area and a
  * menu item for its allergens — the forms share a renderer, never a field list.
  */
-export async function ModuleNewPage({ moduleKey }: { moduleKey: string }) {
-  const module = workspaceModule(moduleKey);
+export async function ModuleNewPage({ moduleKey, categoryId }: { moduleKey: string; categoryId?: string }) {
+  const definition = workspaceModule(moduleKey);
 
-  if (!module || module.source !== "listings" || module.types.length === 0) notFound();
+  if (!definition || definition.source !== "listings" || definition.types.length === 0) notFound();
 
   const { store } = await requireStore();
-  const tree = await listCategoryTree(store.id, module.categoryKind);
+  const tree = await listCategoryTree(store.id, definition.categoryKind);
 
   // The module's own category names, indented by depth so the SelectField can
   // still show the hierarchy a flat list would otherwise lose.
@@ -44,48 +44,48 @@ export async function ModuleNewPage({ moduleKey }: { moduleKey: string }) {
 
   // The Listing module owns the whole product family, so it keeps the type
   // choice; the others *are* one type.
-  const locked = module.types.length === 1;
-  const defaultType = module.types[0] as ListingType;
-  const meta = listingTypeMeta(defaultType);
+  const locked = definition.types.length === 1;
+  const defaultType = definition.types[0] as ListingType;
 
-  const backHref = module.href;
+  const selectedCategory = categories.find(category => category.id === categoryId);
+  const backHref = selectedCategory ? `${definition.href}?category=${encodeURIComponent(selectedCategory.id)}` : definition.href;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`New ${module.noun}`}
-        description={`${module.blurb} The fields below are what a ${meta.label.toLowerCase()} needs, not a generic product form.`}
+        title={selectedCategory ? `New ${selectedCategory.name.replace(/^[·\s]+/, "")} product` : `New ${definition.noun}`}
+        description={`${definition.blurb} Add the details buyers need.`}
         breadcrumb={
           <Link
             className="flex items-center gap-1 text-xs font-medium text-muted hover:text-foreground"
             href={backHref}
           >
             <Icon name="arrowLeft" size={13} />
-            {module.label}
+            {definition.label}
           </Link>
         }
       />
 
-      {module.workflow.autoPublish ? (
+      {definition.workflow.autoPublish ? (
         <InfoNote tone="success" title="This product goes on sale the moment you save it">
-          Adding through Listing means “I am listing this for sale now”. It will be live on your
-          storefront and in the marketplace straight away, so there is no draft option in this
-          workflow — work you have not finished belongs in Drafts.
+          Save to publish on your storefront. You can choose Draft if you are still preparing this product.
         </InfoNote>
       ) : (
-        <InfoNote title={`Saving a ${module.noun}`}>
+        <InfoNote title={`Saving a ${definition.noun}`}>
           Save it as a draft while you are still working on it, and publish when it is ready. Drafts
-          you have started appear in Drafts, under their own module.
+          you have started appear in Drafts, alongside your other unfinished work.
         </InfoNote>
       )}
 
-      <ListingForm
-        autoPublish={module.workflow.autoPublish}
+      <ProductCreation
+        key={store.id}
+        autoPublish={definition.workflow.autoPublish}
         categories={categories}
+        defaultCategoryId={selectedCategory?.id}
         currency={store.currency}
         defaultType={defaultType}
         lockedType={locked}
-        submitLabel={module.workflow.submitLabel}
+        submitLabel={definition.workflow.submitLabel}
       />
     </div>
   );

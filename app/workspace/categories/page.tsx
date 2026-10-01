@@ -55,7 +55,7 @@ export default async function CategoriesPage() {
         <Card.Header className="flex-col items-start gap-1">
           <h2 className="text-lg font-semibold">Your catalogue structure</h2>
           <p className="text-sm text-muted">
-            Platform categories are shared across Link Store and cannot be renamed.
+            Platform categories are shared across Rush Cart and cannot be renamed.
           </p>
         </Card.Header>
         

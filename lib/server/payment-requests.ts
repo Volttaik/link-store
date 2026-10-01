@@ -275,10 +275,11 @@ export async function createPaymentRequest(
                 WHERE li.listing_id = l.id
                 ORDER BY li.position ASC, li.created_at ASC LIMIT 1) AS image_url
          FROM listings l
-        WHERE l.id = ? AND l.store_id = ?`,
+        WHERE l.id = ? AND l.store_id = ? AND l.type = 'product'`,
       [listingId, conversation.store_id],
     );
 
+    if (!listing) return { ok: false, error: "Choose a product from this store." };
     if (listing) {
       contextTitle = listing.title;
       contextImageUrl = listing.image_url;
@@ -477,7 +478,7 @@ export async function startPaymentRequestCheckout(input: {
   if (!isPaystackConfigured) {
     return {
       ok: false,
-      error: "Payments are not configured on this deployment yet. Nothing has been charged.",
+      error: "Payments are currently unavailable. Nothing has been charged.",
     };
   }
 
@@ -531,7 +532,7 @@ export async function startPaymentRequestCheckout(input: {
   await ensureChatOrder({ request, store, buyer, orderId });
 
   // One attempt, one reference. The amount is the request's stored amount.
-  const reference = `LSC_${randomCode(18)}`;
+  const reference = `RCC_${randomCode(18)}`;
   const initialized = await initializeTransaction({
     email: buyer.email,
     amountMinor: Number(request.amount),
@@ -781,20 +782,8 @@ async function chatItemType(request: PaymentRequestRow): Promise<string> {
     request.listing_id,
   ]);
 
-  switch (listing?.type) {
-    case "food":
-      return "food";
-    case "service":
-      return "service";
-    case "digital":
-      return "digital";
-    case "event_ticket":
-      return "ticket";
-    case "rental":
-      return "rental";
-    default:
-      return "product";
-  }
+  if (listing?.type !== "product") throw new Error("This product is no longer available.");
+  return "product";
 }
 
 /* -------------------------------------------------------------------------- */

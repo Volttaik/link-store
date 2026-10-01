@@ -32,7 +32,7 @@ export default async function SearchPage({
   if (!term) {
     return (
       <div className="mx-auto w-full max-w-7xl space-y-8 px-4 py-10 sm:px-6">
-        <PageHeader title="Search Link Store" description="Find products, services, food, events, digital files and stores by name."
+        <PageHeader title="Search Rush Cart" description="Find products, stores, people and Events by name."
         />
         <EmptyState icon="search" title="Start typing to search" description="Use the search box in the navigation bar. Results cover every published listing, storefront and event on the platform."
         />

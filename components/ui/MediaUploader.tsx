@@ -195,18 +195,22 @@ export function ImageUploader({
   onChange,
   folder,
   max = 8,
+  onBusyChange,
 }: {
   value: UploadedImage[];
   onChange: (images: UploadedImage[]) => void;
   folder: string;
   max?: number;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0 || busyRef.current) return;
     setError(null);
 
     const remaining = max - value.length;
@@ -215,6 +219,7 @@ export function ImageUploader({
       return;
     }
 
+    busyRef.current = true; setBusy(true); onBusyChange?.(true);
     const selected = Array.from(files).slice(0, remaining);
     const uploaded: UploadedImage[] = [];
 
@@ -241,6 +246,7 @@ export function ImageUploader({
 
     if (uploaded.length > 0) onChange([...value, ...uploaded]);
     if (inputRef.current) inputRef.current.value = "";
+    busyRef.current = false; setBusy(false); onBusyChange?.(false);
   };
 
   return (
@@ -255,6 +261,7 @@ export function ImageUploader({
             <Button
               isIconOnly
               aria-label="Remove image"
+              isDisabled={busy}
               className="absolute -top-2 -right-2"
               size="sm"
               variant="danger"
@@ -272,6 +279,7 @@ export function ImageUploader({
 
         {value.length < max ? (
           <Button
+            isDisabled={busy}
             className="flex h-24 w-24 flex-col items-center justify-center gap-1 border border-dashed border-border text-muted"
             variant="ghost"
             onPress={() => inputRef.current?.click()}
@@ -313,7 +321,7 @@ export function ImageUploader({
   );
 }
 
-/** Single image uploader (profile picture, logo, banner, event cover). */
+/** Single image uploader (profile picture, shop logo, event cover). */
 export function SingleImageUploader({
   value,
   onChange,
@@ -322,6 +330,7 @@ export function SingleImageUploader({
   purpose = "store",
   fit = "cover",
   previewClassName = "h-16 w-16",
+  onBusyChange,
 }: {
   value: string | null;
   onChange: (image: UploadedImage | null) => void;
@@ -331,12 +340,12 @@ export function SingleImageUploader({
   /**
    * How the preview frames the image. `contain` keeps the whole image at its
    * own proportions inside the frame with room to breathe — logos and marks,
-   * never stretched, cropped or clipped. `cover` fills the frame the way a
-   * cover region does on the storefront.
+   * never stretched, cropped or clipped. `cover` fills the preview frame.
    */
   fit?: "contain" | "cover";
   /** Size/shape of the preview frame. Covers read best in a wide frame. */
   previewClassName?: string;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -347,7 +356,7 @@ export function SingleImageUploader({
     if (!file) return;
 
     setError(null);
-    setBusy(true);
+    setBusy(true); onBusyChange?.(true);
     try {
       const result = await upload(
         file,
@@ -358,7 +367,7 @@ export function SingleImageUploader({
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "Upload failed.");
     } finally {
-      setBusy(false);
+      setBusy(false); onBusyChange?.(false);
       if (inputRef.current) inputRef.current.value = "";
     }
   };
@@ -389,7 +398,7 @@ export function SingleImageUploader({
             {value ? "Replace" : label}
           </Button>
           {value ? (
-            <Button size="sm" variant="danger-soft" onPress={() => onChange(null)}>
+            <Button size="sm" variant="danger-soft" isDisabled={busy} onPress={() => onChange(null)}>
               Remove
             </Button>
           ) : null}

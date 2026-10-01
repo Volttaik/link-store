@@ -18,7 +18,7 @@ import { Icon } from "@/components/ui/Icon";
  * three on a wide desktop. A fourth product does *not* shrink the other three —
  * it waits off-screen and is reached by scrolling sideways.
  */
-const DEFAULT_ITEM_CLASS = "w-[21rem] shrink-0 snap-start sm:w-[24rem] lg:w-[26rem]";
+const DEFAULT_ITEM_CLASS = "w-[min(85vw,21rem)] shrink-0 snap-start sm:w-[24rem] lg:w-[26rem]";
 
 /**
  * A horizontally scrolling row of product cards.

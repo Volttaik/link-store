@@ -5,6 +5,11 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
+localPort = 5001
+externalPort = 3001
+exposeLocalhost = true
+
+[[ports]]
 localPort = 5056
 externalPort = 3000
 
@@ -17,3 +22,27 @@ channel = "legacy"
 [deployment]
 build = ["sh", "-c", "npm ci && npm run db:migrate && npm run build"]
 run = ["sh", "-c", "npm run start"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run dev"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"

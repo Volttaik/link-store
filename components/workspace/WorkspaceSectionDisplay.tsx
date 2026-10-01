@@ -55,7 +55,7 @@ export function WorkspaceSectionDisplay({
         <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-baseline gap-3">
-              <h2 className="min-w-0 truncate text-[19px] font-semibold tracking-tight text-foreground">
+              <h2 className="min-w-0 truncate text-[17px] font-semibold tracking-tight text-foreground">
                 {item.label}
               </h2>
               <span className="shrink-0 text-[12.5px] tabular-nums text-muted">
@@ -173,7 +173,7 @@ export function WorkspaceSectionDisplay({
               <Group label="Latest conversations" />
               {contextData.threads.length === 0 ? (
                 <p className="py-2.5 text-[13px] leading-relaxed text-muted">
-                  No conversations yet. A buyer asking about a service starts one, and it appears
+                  No conversations yet. A buyer asking about a product starts one, and it appears
                   here with the listing it is about.
                 </p>
               ) : (
@@ -286,16 +286,8 @@ function moduleEmpty(context: string): string {
       return "Add a product and it is live and ready to sell straight away.";
     case "drafts":
       return "Drafts appear here the moment you save something unfinished.";
-    case "food":
-      return "Add a menu item and it appears here.";
-    case "services":
-      return "A booking, repair or consultation appears here.";
     case "events":
-      return "Publish a ticketed event and it appears here.";
-    case "rentals":
-      return "A flat, a vehicle or equipment let appears here.";
-    case "digital":
-      return "A file you sell appears here.";
+      return "Curate your products into an Event and it appears here.";
     default:
       return "Nothing here yet.";
   }

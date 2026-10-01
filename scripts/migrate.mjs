@@ -16,6 +16,7 @@ import { loadEnv, projectRoot, resolveDatabase } from "./load-env.mjs";
 loadEnv();
 
 const { url, authToken, isRemote } = resolveDatabase();
+if (isRemote && !process.argv.includes('--approved-remote')) throw new Error('Remote migration requires explicit approval.');
 
 if (!isRemote) {
   mkdirSync(path.join(projectRoot, "data"), { recursive: true });
@@ -310,7 +311,11 @@ async function introduceFulfilmentTracking() {
 
   // The ticket state machine: `checked_in` becomes `used` (same meaning, the
   // name the rest of the platform speaks).
-  await client.execute(`UPDATE tickets SET status = 'used' WHERE status = 'checked_in'`);
+  // Historical tables may remain on upgraded databases, but fresh product-only
+  // databases deliberately have no ticket tables.
+  if ((await client.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tickets'")).rows.length) {
+    await client.execute(`UPDATE tickets SET status = 'used' WHERE status = 'checked_in'`);
+  }
 
   // Backfill shipments for paid orders of the past, from their recorded state.
   // A fulfilled order was delivered; anything still open is being prepared.

@@ -69,7 +69,7 @@ export function ConversationHeader({
       <ChatAvatar name={thread.counterpartName} size={46} src={thread.counterpartAvatar} />
 
       <div className="min-w-0 flex-1">
-        <h1 className="text-[17px] leading-tight font-semibold tracking-tight text-foreground">
+        <h1 className="text-[15px] leading-tight font-semibold tracking-tight text-foreground">
           {thread.counterpartName}
         </h1>
         <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-muted">

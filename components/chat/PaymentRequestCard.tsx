@@ -149,7 +149,7 @@ export function PaymentRequestCard({
           {negotiated ? "Negotiated amount" : "Amount"}
         </p>
         <div className="flex flex-wrap items-baseline gap-x-2">
-          <p className="text-[22px] leading-tight font-bold tracking-tight">
+          <p className="text-[18px] leading-tight font-bold tracking-tight">
             {formatMoney(payment.amount, payment.currency)}
           </p>
           {negotiated ? (

@@ -9,7 +9,6 @@ import {
   ORDER_ACCESS_COOKIE,
   addToCart,
   createOrderFromCart,
-  createTicketOrder,
   getCartView,
   priceCart,
   recordPaymentIntent,
@@ -40,7 +39,6 @@ export async function getActiveCartId(): Promise<string | null> {
 export async function addToCartAction(payload: {
   listingId?: string;
   variantId?: string | null;
-  ticketTypeId?: string | null;
   quantity: number;
 }): Promise<ActionResult<{ itemCount: number }>> {
   const cookieStore = await cookies();
@@ -50,7 +48,6 @@ export async function addToCartAction(payload: {
   const result = await addToCart({
     listingId: payload.listingId,
     variantId: payload.variantId ?? null,
-    ticketTypeId: payload.ticketTypeId ?? null,
     quantity: payload.quantity,
     cartToken: token,
     userId: user?.id ?? null,
@@ -149,6 +146,7 @@ export type CheckoutResult =
 export async function startCheckoutAction(
   payload: CheckoutPayload,
 ): Promise<CheckoutResult> {
+  if (!isPaystackConfigured) return { ok: false, error: "This shop cannot accept payments right now. Your basket is unchanged." };
   const cookieStore = await cookies();
   const cartId = await getActiveCartId();
   if (!cartId) return { ok: false, error: "Your cart is empty." };
@@ -199,7 +197,7 @@ export async function startCheckoutAction(
     };
   }
 
-  const reference = `LS_${randomCode(18)}`;
+  const reference = `RC_${randomCode(18)}`;
 
   const initialized = await initializeTransaction({
     email: order.email,
@@ -215,7 +213,7 @@ export async function startCheckoutAction(
   });
 
   if (!initialized.ok) {
-    return { ok: false, error: initialized.error };
+    return { ok: false, error: "Payment could not be started. Your basket is unchanged. Please try again." };
   }
 
   await recordPaymentIntent({
@@ -244,113 +242,6 @@ export async function startCheckoutAction(
 
   revalidatePath("/cart");
   revalidatePath("/checkout");
-  revalidatePath("/workspace");
-
-  return {
-    ok: true,
-    authorizationUrl: initialized.authorizationUrl,
-    orderNumber: order.order_number,
-    orderId: order.id,
-  };
-}
-
-export type TicketCheckoutPayload = {
-  eventId: string;
-  /** What the buyer chose: ticket type → how many. */
-  items: Array<{ ticketTypeId: string; quantity: number }>;
-  email: string;
-  name?: string | null;
-  phone?: string | null;
-  note?: string | null;
-};
-
-/**
- * Buy tickets.
- *
- * The ticket purchase flow: no cart, no cart cookie, no basket line — the chosen
- * admissions become one order for one event, and the amount sent to Paystack is
- * the server's own calculation from the database. Everything about the choice
- * (which types, which prices, how many are left, whether they are on sale) is
- * re-verified in `createTicketOrder`, so an edited request buys nothing extra.
- */
-export async function startTicketCheckoutAction(
-  payload: TicketCheckoutPayload,
-): Promise<CheckoutResult> {
-  const user = await getCurrentUser();
-  const cookieStore = await cookies();
-
-  const result = await createTicketOrder({
-    eventId: payload.eventId,
-    userId: user?.id ?? null,
-    customer: {
-      email: payload.email,
-      name: payload.name ?? null,
-      phone: payload.phone ?? null,
-      note: payload.note ?? null,
-    },
-    lines: payload.items,
-  });
-
-  if (!result.ok) {
-    return { ok: false, error: result.error, issues: result.issues };
-  }
-
-  const order = result.order;
-
-  if (!isPaystackConfigured) {
-    return {
-      ok: false,
-      error:
-        `Order ${order.order_number} is saved, but this event can't take payments yet. ` +
-        "Your tickets are not issued until the payment is verified. Try again a little later.",
-    };
-  }
-
-  if (order.total <= 0) {
-    return { ok: false, error: "There's nothing to pay on this order." };
-  }
-
-  const reference = `LS_${randomCode(18)}`;
-
-  const initialized = await initializeTransaction({
-    email: order.email,
-    amountMinor: order.total,
-    currency: order.currency,
-    reference,
-    callbackUrl: `${await requestBaseUrl()}/checkout/callback`,
-    metadata: {
-      orderId: order.id,
-      orderNumber: order.order_number,
-      storeId: order.store_id,
-      kind: "ticket",
-    },
-  });
-
-  if (!initialized.ok) {
-    return { ok: false, error: initialized.error };
-  }
-
-  await recordPaymentIntent({
-    orderId: order.id,
-    storeId: order.store_id,
-    reference: initialized.reference,
-    amount: order.total,
-    currency: order.currency,
-    authorizationUrl: initialized.authorizationUrl,
-  });
-
-  // The same guest-order cookie the product checkout uses, so a buyer without an
-  // account can find this order (and its tickets) again.
-  cookieStore.set(ORDER_ACCESS_COOKIE, order.access_token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 90,
-  });
-
-  revalidatePath("/tickets");
-  revalidatePath("/orders");
   revalidatePath("/workspace");
 
   return {

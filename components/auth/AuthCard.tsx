@@ -33,7 +33,7 @@ export function AuthCard({
           <BrandMark className="size-6" />
           <Wordmark className="text-[13px]" />
         </span>
-        <h1 className="mt-3.5 text-[20px] leading-tight font-semibold tracking-tight text-foreground">
+        <h1 className="mt-3.5 text-[17.5px] leading-tight font-semibold tracking-tight text-foreground">
           {title}
         </h1>
         <p className="mt-1.5 max-w-[19rem] text-[13px] leading-relaxed text-muted">{description}</p>

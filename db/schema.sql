@@ -1,5 +1,5 @@
 -- ============================================================================
--- LINK STORE — Core schema (Turso / libSQL, SQLite dialect)
+-- Rush Cart — Core schema (Turso / libSQL, SQLite dialect)
 -- ----------------------------------------------------------------------------
 -- Design principles:
 --   * ONE reusable commerce engine. Product / food / service / digital / event
@@ -19,7 +19,7 @@ PRAGMA foreign_keys = ON;
 -- ---------------------------------------------------------------------------
 -- These four tables belong to the authentication engine (lib/auth/server.ts).
 -- The engine creates them, and it is the only thing that writes authentication
--- data into them; the rest of LINK STORE reads them.
+-- data into them; the rest of Rush Cart reads them.
 --
 -- The engine's column names are mapped in its config, so `users` and `sessions`
 -- keep the names and foreign keys the platform has always used — every
@@ -65,6 +65,17 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS sessions_user_id_idx  ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires  ON sessions(expires_at);
+
+-- Browser endpoints are tied to a real session, so logout stops server delivery.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  endpoint TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_push_session ON push_subscriptions(session_id);
+CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id);
 
 -- A linked sign-in provider, with its tokens: Google today. An email code is
 -- deliberately absent — it proves the address itself and leaves nothing behind
@@ -152,7 +163,7 @@ CREATE INDEX IF NOT EXISTS idx_stores_pub   ON stores(is_published, created_at);
 CREATE TABLE IF NOT EXISTS store_settings (
   store_id              TEXT PRIMARY KEY REFERENCES stores(id) ON DELETE CASCADE,
   low_stock_threshold   INTEGER NOT NULL DEFAULT 5,
-  order_prefix          TEXT NOT NULL DEFAULT 'LS',
+  order_prefix          TEXT NOT NULL DEFAULT 'RC',
   shipping_flat_fee     INTEGER NOT NULL DEFAULT 0,
   free_shipping_over    INTEGER,
   payout_bank_code      TEXT,
@@ -265,17 +276,6 @@ CREATE TABLE IF NOT EXISTS listing_variants (
 );
 CREATE INDEX IF NOT EXISTS idx_variants_listing ON listing_variants(listing_id, position);
 
-CREATE TABLE IF NOT EXISTS digital_assets (
-  id           TEXT PRIMARY KEY,
-  listing_id   TEXT NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
-  storage_key  TEXT NOT NULL,                          -- R2 object key (never public)
-  file_name    TEXT NOT NULL,
-  content_type TEXT,
-  file_size    INTEGER,
-  version      INTEGER NOT NULL DEFAULT 1,
-  created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-CREATE INDEX IF NOT EXISTS idx_digital_assets ON digital_assets(listing_id);
 
 -- ---------------------------------------------------------------------------
 -- Events + ticketing
@@ -303,27 +303,21 @@ CREATE TABLE IF NOT EXISTS events (
   created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
+CREATE TABLE IF NOT EXISTS event_products (
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  product_id TEXT NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (event_id, product_id)
+);
+CREATE INDEX IF NOT EXISTS idx_event_products_product ON event_products(product_id);
+CREATE TRIGGER IF NOT EXISTS event_products_owner_insert BEFORE INSERT ON event_products
+WHEN NOT EXISTS (SELECT 1 FROM events e JOIN listings l ON l.store_id = e.store_id WHERE e.id = NEW.event_id AND l.id = NEW.product_id AND l.type = 'product')
+BEGIN SELECT RAISE(ABORT, 'Product must belong to collection store'); END;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_events_store_slug ON events(store_id, slug);
 CREATE INDEX IF NOT EXISTS idx_events_store  ON events(store_id, status, starts_at);
 CREATE INDEX IF NOT EXISTS idx_events_public ON events(status, starts_at);
 
-CREATE TABLE IF NOT EXISTS ticket_types (
-  id             TEXT PRIMARY KEY,
-  event_id       TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-  name           TEXT NOT NULL,
-  description    TEXT,
-  price          INTEGER NOT NULL DEFAULT 0,
-  currency       TEXT NOT NULL DEFAULT 'NGN',
-  quantity_total INTEGER NOT NULL DEFAULT 0,
-  quantity_sold  INTEGER NOT NULL DEFAULT 0,
-  max_per_order  INTEGER NOT NULL DEFAULT 10,
-  sales_start    TEXT,
-  sales_end      TEXT,
-  is_active      INTEGER NOT NULL DEFAULT 1,
-  position       INTEGER NOT NULL DEFAULT 0,
-  created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-CREATE INDEX IF NOT EXISTS idx_ticket_types_event ON ticket_types(event_id, position);
 
 -- ---------------------------------------------------------------------------
 -- Customers (per store — a buyer is a customer of a specific storefront)
@@ -365,7 +359,7 @@ CREATE TABLE IF NOT EXISTS cart_items (
   cart_id        TEXT NOT NULL REFERENCES carts(id) ON DELETE CASCADE,
   listing_id     TEXT NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
   variant_id     TEXT REFERENCES listing_variants(id) ON DELETE CASCADE,
-  ticket_type_id TEXT REFERENCES ticket_types(id) ON DELETE CASCADE,
+  ticket_type_id TEXT ,
   quantity       INTEGER NOT NULL DEFAULT 1,
   unit_price     INTEGER NOT NULL,                     -- display snapshot; re-priced server-side at checkout
   currency       TEXT NOT NULL DEFAULT 'NGN',
@@ -426,7 +420,7 @@ CREATE TABLE IF NOT EXISTS order_items (
   item_type         TEXT NOT NULL,                     -- product|food|service|digital|ticket
   listing_id        TEXT REFERENCES listings(id) ON DELETE SET NULL,
   variant_id        TEXT REFERENCES listing_variants(id) ON DELETE SET NULL,
-  ticket_type_id    TEXT REFERENCES ticket_types(id) ON DELETE SET NULL,
+  ticket_type_id    TEXT ,
   event_id          TEXT REFERENCES events(id) ON DELETE SET NULL,
   title             TEXT NOT NULL,
   variant_name      TEXT,
@@ -502,37 +496,6 @@ CREATE INDEX IF NOT EXISTS idx_txn_order ON transactions(order_id);
 -- ---------------------------------------------------------------------------
 -- Tickets issued after successful payment
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS tickets (
-  id             TEXT PRIMARY KEY,
-  order_id       TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-  order_item_id  TEXT REFERENCES order_items(id) ON DELETE CASCADE,
-  event_id       TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-  ticket_type_id TEXT REFERENCES ticket_types(id) ON DELETE SET NULL,
-  store_id       TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
-  code           TEXT NOT NULL UNIQUE,
-  holder_name    TEXT,
-  holder_email   TEXT,
-  -- The full ticket state machine. The database is authoritative: a ticket is
-  -- valid exactly once, `used` is written only by the atomic door redemption,
-  -- and a refunded or cancelled order voids its tickets at the same moment.
-  --   valid      — live, may be admitted once
-  --   used       — admitted at the door (was "checked_in"); a second scan is refused
-  --   cancelled  — the order was cancelled before use
-  --   refunded   — the order was refunded
-  --   expired    — the event passed without the ticket being used
-  --   void       — withdrawn by the seller; never admissible
-  status         TEXT NOT NULL DEFAULT 'valid',
-  checked_in_at  TEXT,                                  -- when it was used at the door
-  -- The holder's trash. A ticket is never deleted when an event ends and never
-  -- deleted by the platform: the holder moves it out of their normal inventory
-  -- themselves (`deleted_at` set), keeps every fact about it, and can restore
-  -- it. Nothing here ever changes the ticket's identity or its state machine.
-  deleted_at     TEXT,
-  created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-CREATE INDEX IF NOT EXISTS idx_tickets_order  ON tickets(order_id);
-CREATE INDEX IF NOT EXISTS idx_tickets_event  ON tickets(event_id, status);
-CREATE INDEX IF NOT EXISTS idx_tickets_holder ON tickets(store_id, deleted_at);
 
 -- ---------------------------------------------------------------------------
 -- Shipments — the fulfilment record behind tracking and pickup
@@ -595,21 +558,6 @@ CREATE INDEX IF NOT EXISTS idx_shipment_events ON shipment_events(shipment_id, c
 -- ---------------------------------------------------------------------------
 -- Digital download grants (R2 keys are never exposed; downloads stream via API)
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS downloads (
-  id                 TEXT PRIMARY KEY,
-  order_id           TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-  order_item_id      TEXT NOT NULL REFERENCES order_items(id) ON DELETE CASCADE,
-  listing_id         TEXT NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
-  asset_id           TEXT REFERENCES digital_assets(id) ON DELETE CASCADE,
-  token              TEXT NOT NULL UNIQUE,
-  email              TEXT,
-  download_count     INTEGER NOT NULL DEFAULT 0,
-  max_downloads      INTEGER NOT NULL DEFAULT 10,
-  expires_at         TEXT,
-  last_downloaded_at TEXT,
-  created_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-CREATE INDEX IF NOT EXISTS idx_downloads_order ON downloads(order_id);
 
 -- ---------------------------------------------------------------------------
 -- Inventory audit trail

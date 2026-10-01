@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 
 import { subscribeChat } from "@/lib/chat/realtime";
 
-export function LiveUpdates({ enabled }: { enabled: boolean }) {
+export function LiveUpdates({ enabled, userId }: { enabled: boolean; userId?: string }) {
   const router = useRouter();
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -40,7 +40,7 @@ export function LiveUpdates({ enabled }: { enabled: boolean }) {
       detach();
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
     };
-  }, [enabled, router]);
+  }, [enabled, userId, router]);
 
   return null;
 }

@@ -43,7 +43,7 @@ export default async function AccountSettingsPage() {
           <p className="text-sm text-muted">
             {userState.hasWorkspace
               ? "You own a workspace — your store, products, events and sales live there."
-              : "A workspace is where you sell and manage your own content. You do not need one to use Link Store."}
+              : "A workspace is where you sell and manage your own content. You do not need one to use Rush Cart."}
           </p>
         </Card.Header>
         <Card.Content className="gap-3">

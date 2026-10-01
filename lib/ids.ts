@@ -34,8 +34,8 @@ export function newId(prefix: string): string {
  * Customer-facing order number. Sequential-looking and unique: the store's
  * prefix, the year, then random entropy — safe to display and to guess-proof.
  */
-export function newOrderNumber(prefix = "LS"): string {
+export function newOrderNumber(prefix = "RC"): string {
   const year = new Date().getUTCFullYear().toString().slice(-2);
-  const safePrefix = prefix.replace(/[^A-Za-z0-9]/g, "").slice(0, 4) || "LS";
+  const safePrefix = prefix.replace(/[^A-Za-z0-9]/g, "").slice(0, 4) || "RC";
   return `${safePrefix.toUpperCase()}-${year}-${randomCode(6)}`;
 }

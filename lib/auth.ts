@@ -16,6 +16,7 @@ import { redirect } from "next/navigation";
 
 import { SESSION_COOKIE, SECURE_SESSION_COOKIE } from "./auth/cookies";
 import { auth } from "./auth/server";
+import { isPushConfigured } from "./server/push";
 import { execute, queryOne } from "./db";
 import {
   GUEST_USER_STATE,
@@ -182,16 +183,7 @@ export async function ownsEvent(eventId: string, userId: string): Promise<boolea
   return Boolean(row);
 }
 
-/** Does this account own the workspace that issued a ticket? */
-export async function ownsTicket(ticketId: string, userId: string): Promise<boolean> {
-  const row = await queryOne<{ id: string }>(
-    `SELECT t.id FROM tickets t
-       JOIN stores s ON s.id = t.store_id
-      WHERE t.id = ? AND s.user_id = ?`,
-    [ticketId, userId],
-  );
-  return Boolean(row);
-}
+
 
 /** Does this account own the workspace a seller-side order was placed against? */
 export async function ownsOrder(orderId: string, userId: string): Promise<boolean> {
@@ -235,13 +227,17 @@ export const getUserProfile = cache(async (userId: string) => {
  * user's rows is exactly "sign this account out everywhere".
  */
 export async function revokeAllSessions(userId: string): Promise<void> {
+  if (isPushConfigured) await execute("DELETE FROM push_subscriptions WHERE user_id = ?", [userId]);
   await execute("DELETE FROM sessions WHERE user_id = ?", [userId]);
 }
 
 /** Ends the current session and drops the cookie. */
 export async function clearSession(): Promise<void> {
   try {
-    await auth.api.signOut({ headers: await headers() });
+    const requestHeaders = await headers();
+    const current = await auth.api.getSession({ headers: requestHeaders });
+    if (isPushConfigured && current) await execute("DELETE FROM push_subscriptions WHERE session_id = ?", [current.session.id]).catch(() => {});
+    await auth.api.signOut({ headers: requestHeaders });
   } catch {
     // Already signed out, or the cookie was unreadable — either way the cookie
     // below is what the browser is left holding.

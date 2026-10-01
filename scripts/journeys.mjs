@@ -1,408 +1,135 @@
-/**
- * Journey tests — the real user flows of this pass, over HTTP, against live
- * database data.
- *
- * Covers, in order:
- *   1. Register → verify → signed in (the real OTP journey; dev has no mailbox,
- *      so the code is read from the `verification` table).
- *   2. Shop experience: only real sections, primary design type leads, the
- *      design type override in settings changes the lead section.
- *   3. Messaging: buyer opens a thread with a shop, both sides persist across
- *      refreshes, the thread renders as the full-screen experience.
- *   4. Marketplace browsing renders the rearrangement grid.
- *
- * Everything it creates is deleted at the end (including on failure).
- *
- *   node scripts/journeys.mjs [baseUrl]
- */
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { readFileSync, mkdirSync, rmSync } from 'node:fs';
+import { createClient } from '@libsql/client';
+import { hashPassword } from 'better-auth/crypto';
 
-import { createClient } from "@libsql/client";
-import { loadEnv, resolveDatabase } from "./load-env.mjs";
-
-const BASE = process.argv[2] ?? "http://localhost:5000";
-loadEnv();
-const { url, authToken } = resolveDatabase();
-const db = createClient(authToken ? { url, authToken } : { url });
-
-const stamp = Date.now().toString(36);
-const failures = [];
-let checked = 0;
-
-/** The dev server holds the SQLite file, so a write can lose the lock race. */
-async function write(statements) {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    try {
-      return await db.batch(statements, "write");
-    } catch (error) {
-      if (!String(error).includes("SQLITE_BUSY")) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-  }
-  throw new Error("database stayed locked");
-}
-
-async function post(path, body, headers = {}) {
-  const response = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json", origin: BASE, ...headers },
-    body: JSON.stringify(body),
-    redirect: "manual",
-  });
-  return { response, text: await response.text() };
-}
-
-/** Register → send code → read it from the database → verify → session cookie. */
-async function signUp(name, email) {
-  let r = await post("/api/auth/sign-up/email", { email, password: `pw-${stamp}-x1`, name });
-  if (r.response.status !== 200) throw new Error(`sign-up failed: ${r.response.status} ${r.text}`);
-
-  await post("/api/auth/email-otp/send-verification-otp", { email, type: "email-verification" });
-
-  const codes = await db.execute({
-    sql: "SELECT identifier, value FROM verification ORDER BY createdAt DESC LIMIT 10",
-    args: [],
-  });
-  const row = codes.rows.find((entry) => String(entry.identifier).includes(email));
-  if (!row) throw new Error(`no verification code for ${email}`);
-
-  r = await post("/api/auth/email-otp/verify-email", {
-    email,
-    otp: String(row.value).split(":")[0],
-  });
-  const setCookie = r.response.headers.getSetCookie?.() ?? [];
-  const sessionCookie = setCookie
-    .map((value) => value.split(";")[0])
-    .find((value) => value.includes("better-auth.session_token"));
-  if (!sessionCookie) throw new Error(`no session cookie for ${email}`);
-
-  const user = await db.execute({ sql: "SELECT id FROM users WHERE email = ?", args: [email] });
-  return { userId: String(user.rows[0].id), cookie: sessionCookie };
-}
-
-function check(label, condition, detail = "") {
-  checked += 1;
-  if (!condition) failures.push(`${label}${detail ? ` — ${detail}` : ""}`);
-}
-
-async function getPage(path, cookie) {
-  const response = await fetch(`${BASE}${path}`, {
-    headers: cookie ? { cookie } : {},
-    redirect: "manual",
-  });
-  return { status: response.status, html: await response.text() };
-}
-
-const sellerEmail = `journey-seller-${stamp}@example.com`;
-const buyerEmail = `journey-buyer-${stamp}@example.com`;
-const handle = `journey${stamp}`;
-const storeId = `str_journey_${stamp}`;
+const dir = `.cache/http-audit-${process.pid}`;
+mkdirSync(dir, { recursive: true });
+const url = `file:./${dir}/test.db`;
+const db = createClient({ url });
+await db.executeMultiple(readFileSync('db/schema.sql', 'utf8'));
+await db.executeMultiple(readFileSync('db/seed.sql', 'utf8'));
 const now = new Date().toISOString();
-
-let seller = null;
-let buyer = null;
-
-try {
-  // --- 1. Two real accounts, one real shop -------------------------------
-  seller = await signUp("Journey Seller", sellerEmail);
-  buyer = await signUp("Journey Buyer", buyerEmail);
-
-  await write([
-    {
-      sql: `INSERT INTO stores (id, user_id, slug, name, tagline, currency, country, is_published, created_at, updated_at)
-            VALUES (?, ?, ?, 'Journey Shop', 'Sections and messages', 'NGN', 'Nigeria', 1, ?, ?)`,
-      args: [storeId, seller.userId, handle, now, now],
-    },
-    { sql: "INSERT INTO store_settings (store_id, updated_at) VALUES (?, ?)", args: [storeId, now] },
-  ]);
-
-  const catId = (name) => `cat_j_${name}_${stamp}`.toLowerCase();
-  const listing = (id, type, title, categoryId) => ({
-    sql: `INSERT INTO listings
-            (id, store_id, category_id, type, fulfilment, title, slug, description, currency, price,
-             track_inventory, stock, status, published_at, created_at, updated_at)
-          VALUES (?, ?, ?, ?, 'shipping', ?, ?, 'Journey listing.', 'NGN', 100000, 0, 5, 'active', ?, ?, ?)`,
-    args: [id, storeId, categoryId, type, title, `${id}`, now, now, now],
-  });
-
-  await write([
-    {
-      sql: `INSERT INTO categories (id, store_id, name, slug, kind, position, created_at) VALUES
-            (?, ?, 'Meals', 'meals', 'food', 0, ?),
-            (?, ?, 'Snacks', 'snacks', 'food', 1, ?),
-            (?, ?, 'Lighting', 'lighting', 'product', 2, ?),
-            (?, ?, 'Repairs', 'repairs', 'service', 3, ?)`,
-      args: [
-        catId("meals"), storeId, now,
-        catId("snacks"), storeId, now,
-        catId("lighting"), storeId, now,
-        catId("repairs"), storeId, now,
-      ],
-    },
-    listing(`lst_j_food_a_${stamp}`, "food", "Journey Jollof", catId("meals")),
-    listing(`lst_j_food_b_${stamp}`, "food", "Journey Puff", catId("snacks")),
-    listing(`lst_j_prod_${stamp}`, "physical", "Journey Lamp", catId("lighting")),
-    listing(`lst_j_serv_${stamp}`, "service", "Journey Repairs", catId("repairs")),
-    {
-      sql: `INSERT INTO events (id, store_id, title, slug, description, starts_at, city, status, created_at, updated_at)
-            VALUES (?, ?, 'Journey Night', ?, 'Journey event.', ?, 'Lagos', 'published', ?, ?)`,
-      args: [`evt_j_${stamp}`, storeId, `journey-night-${stamp}`, new Date(Date.now() + 7 * 86400000).toISOString(), now, now],
-    },
-    {
-      sql: `INSERT INTO ticket_types (id, event_id, name, price, currency, quantity_total, created_at)
-            VALUES (?, ?, 'Entry', 500000, 'NGN', 20, ?)`,
-      args: [`tkt_j_${stamp}`, `evt_j_${stamp}`, now],
-    },
-  ]);
-
-  // --- 2. The shop experience -------------------------------------------
-  let page = await getPage(`/@${handle}`);
-  check("shop renders", page.status === 200, `status ${page.status}`);
-  check("shop has the section selector", page.html.includes(`Sections of Journey Shop`));
-  for (const label of ["Food", "Products", "Services", "Events"]) {
-    check(`shop shows only real sections (${label})`, page.html.includes(`>${label}<span`));
-  }
-  check(
-    "primary design type leads (Food first)",
-    /aria-pressed="true"[^>]*>Food</.test(page.html),
-    "the active chip is not Food",
-  );
-  check("cards are rearrangeable", page.html.includes("data-rearrange-key"));
-  check(
-    "welcome line names the section",
-    page.html.includes("Welcome to the Food section of Journey Shop"),
-  );
-
-  // The owner steers the lead in settings; every visitor sees the change.
-  await write([
-    { sql: "UPDATE store_settings SET design_type = 'services' WHERE store_id = ?", args: [storeId] },
-  ]);
-  page = await getPage(`/@${handle}`);
-  check(
-    "manual design type override wins (Services leads)",
-    /aria-pressed="true"[^>]*>Services</.test(page.html),
-    "the active chip is not Services",
-  );
-  await write([
-    { sql: "UPDATE store_settings SET design_type = NULL WHERE store_id = ?", args: [storeId] },
-  ]);
-
-  page = await getPage("/workspace/settings", seller.cookie);
-  check("settings render signed-in", page.status === 200, `status ${page.status}`);
-  check("settings expose Design Type", page.html.includes("Design type"));
-  check("settings offer the auto option", page.html.includes("follow what I sell"));
-
-  // --- 3. Messaging, both sides -----------------------------------------
-  let r = await post("/api/messages", { storeId, listingId: null, subject: "Question about the shop" }, { cookie: buyer.cookie });
-  let parsed = {};
-  try {
-    parsed = JSON.parse(r.text);
-  } catch {
-    // handled below
-  }
-  check("buyer can open a thread", r.response.status === 200 && Boolean(parsed.conversationId), r.text.slice(0, 160));
-  const conversationId = parsed.conversationId;
-
-  if (conversationId) {
-    r = await post(
-      "/api/messages",
-      { conversationId, body: "Hello from the journey buyer" },
-      { cookie: buyer.cookie },
-    );
-    check("buyer can send a message", r.response.status === 200, r.text.slice(0, 160));
-
-    // Refresh the thread as the buyer — a message must survive navigation.
-    page = await getPage(`/messages/${conversationId}`, buyer.cookie);
-    check("thread is a full page", page.status === 200, `status ${page.status}`);
-    check("sent message persists", page.html.includes("Hello from the journey buyer"));
-
-    // The shop side sees it too, in the chat system's conversation sidebar.
-    page = await getPage("/messages", seller.cookie);
-    check("seller sees the thread", page.html.includes("Question about the shop"));
-    check("seller sees unread state", page.html.includes("unread"));
-
-    r = await post(
-      "/api/messages",
-      { conversationId, body: "Reply from the journey shop" },
-      { cookie: seller.cookie },
-    );
-    check("seller can reply", r.response.status === 200, r.text.slice(0, 160));
-
-    page = await getPage(`/messages/${conversationId}`, buyer.cookie);
-    check("reply persists for the buyer", page.html.includes("Reply from the journey shop"));
-
-    // Opening a thread twice must return the same thread (no scattering).
-    r = await post("/api/messages", { storeId, listingId: null, subject: "Question about the shop" }, { cookie: buyer.cookie });
-    try {
-      parsed = JSON.parse(r.text);
-    } catch {
-      parsed = {};
-    }
-    check("re-opening returns the same thread", parsed.conversationId === conversationId);
-
-    // --- History: one page at a time, in order, never the archive --------
-    let history = await fetch(`${BASE}/api/messages?conversationId=${conversationId}`, {
-      headers: { cookie: buyer.cookie },
-    });
-    let pageJson = {};
-    try {
-      pageJson = await history.json();
-    } catch {
-      // handled below
-    }
-    check(
-      "history loads one page",
-      history.status === 200 && Array.isArray(pageJson.messages),
-      `status ${history.status}`,
-    );
-    check(
-      "history is oldest-first and real",
-      (pageJson.messages ?? []).length >= 2 &&
-        pageJson.messages.every(
-          (message, index, all) =>
-            typeof message.id === "string" && (index === 0 || all[index - 1].createdAt <= message.createdAt),
-        ),
-    );
-
-    const messages = pageJson.messages ?? [];
-    const [firstMsg, secondMsg] = messages;
-    if (secondMsg) {
-      history = await fetch(
-        `${BASE}/api/messages?conversationId=${conversationId}&before=${secondMsg.id}`,
-        { headers: { cookie: buyer.cookie } },
-      );
-      const earlier = await history.json().catch(() => ({ messages: [] }));
-      check(
-        "older pages come back in order",
-        history.status === 200 && earlier.messages.every((message) => message.createdAt <= secondMsg.createdAt),
-      );
-    }
-    if (firstMsg) {
-      history = await fetch(
-        `${BASE}/api/messages?conversationId=${conversationId}&after=${firstMsg.id}`,
-        { headers: { cookie: buyer.cookie } },
-      );
-      const after = await history.json().catch(() => ({ messages: [] }));
-      check(
-        "gap fill returns only what follows",
-        after.messages.every((message) => message.id !== firstMsg.id && message.createdAt >= firstMsg.createdAt),
-      );
-    }
-
-    // Several sends in quick succession: every one confirms, once, in order.
-    const sentIds = [];
-    for (const word of ["one", "two", "three"]) {
-      const out = await post("/api/messages", { conversationId, body: `burst ${word}` }, { cookie: buyer.cookie });
-      try {
-        sentIds.push(JSON.parse(out.text).message.id);
-      } catch {
-        sentIds.push(null);
-      }
-    }
-    check("quick sends all confirm", sentIds.every(Boolean), String(sentIds));
-    check("quick sends are distinct", new Set(sentIds).size === 3, String(sentIds));
-
-    // A conversation that is not yours is closed — the id proves nothing.
-    const outsider = await fetch(`${BASE}/api/messages?conversationId=${conversationId}`, {
-      headers: {},
-    });
-    check("history is not public", outsider.status === 401, `status ${outsider.status}`);
-    const bogus = await fetch(`${BASE}/api/messages?conversationId=cnv_nope`, {
-      headers: { cookie: buyer.cookie },
-    });
-    check("a foreign conversation is refused", bogus.status === 403, `status ${bogus.status}`);
-
-    // --- Realtime: a reply is pushed down the stream ---------------------
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 6000);
-    const live = await fetch(`${BASE}/api/messages/stream`, {
-      headers: { cookie: buyer.cookie, accept: "text/event-stream" },
-      signal: controller.signal,
-    });
-    check(
-      "the live channel opens",
-      live.status === 200 && (live.headers.get("content-type") ?? "").includes("text/event-stream"),
-      `status ${live.status}`,
-    );
-    await post(
-      "/api/messages",
-      { conversationId, body: "live from the journey shop" },
-      { cookie: seller.cookie },
-    );
-    const reader = live.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let sawLive = false;
-    while (!sawLive) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      sawLive = buffer.includes("live from the journey shop");
-    }
-    clearTimeout(timer);
-    controller.abort();
-    check("a reply is pushed over the stream", sawLive, buffer.slice(0, 200));
-  }
-
-  // A seller cannot message their own shop — refused at the source.
-  r = await post("/api/messages", { storeId, listingId: null, subject: "Talking to myself" }, { cookie: seller.cookie });
-  check("self-messaging is impossible", r.response.status === 400, `status ${r.response.status}`);
-
-  // A visitor who is not a party gets nothing.
-  const anonymous = await getPage(`/workspace/messages${conversationId ? `/${conversationId}` : ""}`);
-  check("threads are not public", anonymous.status === 307 || anonymous.status === 404, `status ${anonymous.status}`);
-
-  // --- 4. Marketplace & discovery ---------------------------------------
-  page = await getPage("/products");
-  check("marketplace renders", page.status === 200, `status ${page.status}`);
-  check("marketplace uses rearrangement", page.html.includes("data-rearrange-key"));
-
-  page = await getPage(`/listing/${`lst_j_prod_${stamp}`}`);
-  check("listing page offers messaging", page.html.includes("Message"), "no Message action");
-
-  page = await getPage(`/@${handle}`, buyer.cookie);
-  check("shop header offers messaging", /Message Journey Shop|>Message</.test(page.html), "no Message action");
-
-  page = await getPage(`/?category=`);
-  check("home renders", page.status === 200, `status ${page.status}`);
-  check("home announces category shifts", page.html.includes('role="status"'));
-} catch (error) {
-  failures.push(`threw: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
-} finally {
-  // Cleanup (leave the server data tidy on failure too).
-  const rows = await db
-    .execute({ sql: "SELECT id FROM users WHERE email IN (?, ?)", args: [sellerEmail, buyerEmail] })
-    .then((result) => result.rows.map((row) => String(row.id)))
-    .catch(() => []);
-
-  const statements = [
-    { sql: "DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE store_id = ?)", args: [storeId] },
-    { sql: "DELETE FROM conversations WHERE store_id = ?", args: [storeId] },
-    { sql: "DELETE FROM ticket_types WHERE event_id IN (SELECT id FROM events WHERE store_id = ?)", args: [storeId] },
-    { sql: "DELETE FROM events WHERE store_id = ?", args: [storeId] },
-    { sql: "DELETE FROM listings WHERE store_id = ?", args: [storeId] },
-    { sql: "DELETE FROM categories WHERE store_id = ?", args: [storeId] },
-    { sql: "DELETE FROM store_settings WHERE store_id = ?", args: [storeId] },
-    { sql: "DELETE FROM stores WHERE id = ?", args: [storeId] },
-  ];
-  for (const userId of [...rows, seller?.userId, buyer?.userId].filter(Boolean)) {
-    statements.push(
-      { sql: "DELETE FROM verification WHERE identifier LIKE ?", args: [`%${userId}%`] },
-      { sql: "DELETE FROM sessions WHERE user_id = ?", args: [userId] },
-      { sql: 'DELETE FROM account WHERE "userId" = ?', args: [userId] },
-      { sql: "DELETE FROM users WHERE id = ?", args: [userId] },
-    );
-  }
-  statements.push(
-    { sql: "DELETE FROM verification WHERE identifier LIKE ?", args: [`%${sellerEmail}%`] },
-    { sql: "DELETE FROM verification WHERE identifier LIKE ?", args: [`%${buyerEmail}%`] },
-  );
-  await write(statements).catch(() => {});
+const password = 'local-audit-password-only';
+for (const id of ['seller', 'buyer', 'other']) {
+  await db.execute({ sql: 'INSERT INTO users (id, email, name, email_verified, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)', args: [id, `${id}@example.org`, id, now, now] });
+  await db.execute({ sql: 'INSERT INTO account (id, accountId, providerId, userId, password, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)', args: [`account-${id}`, id, 'credential', id, await hashPassword(password), now, now] });
 }
-
-console.log(`checked ${checked} journey assertions`);
-if (failures.length > 0) {
-  console.error(`\n${failures.length} failure(s):`);
-  for (const failure of failures) console.error(` - ${failure}`);
-  process.exit(1);
+await db.executeMultiple(`
+INSERT INTO stores (id, user_id, slug, name, is_published, primary_category) VALUES ('store', 'seller', 'audit-store', 'Audit Store', 1, 'fashion');
+UPDATE stores SET logo_url = '/brand/rush-cart-logo.png', banner_url = '/brand/rush-cart-logo.png', description = 'Thoughtful products from an independent shop.', tagline = 'Everyday, well chosen.' WHERE id = 'store';
+INSERT INTO store_settings (store_id) VALUES ('store');
+INSERT INTO listings (id, store_id, type, title, slug, category_id, price, stock, status) VALUES ('clothing', 'store', 'product', 'Audit Shirt', 'audit-shirt', 'cat_platform_clothing', 3000, 10, 'active');
+INSERT INTO listings (id, store_id, type, title, slug, category_id, price, stock, status) VALUES ('electronics', 'store', 'product', 'Audit Headphones', 'audit-headphones', 'cat_platform_electronics', 4000, 10, 'active');
+INSERT INTO listings (id, store_id, type, title, slug, category_id, price, stock, status) VALUES ('product', 'store', 'product', 'Audit Jacket', 'audit-jacket', 'cat_platform_fashion', 1000, 10, 'active');
+INSERT INTO listings (id, store_id, type, title, slug, category_id, price, stock, status) VALUES ('beauty', 'store', 'product', 'Audit Cream', 'audit-cream', 'cat_platform_beauty', 2000, 10, 'active');
+INSERT INTO listings (id, store_id, type, title, slug, price, stock, status) VALUES ('legacy', 'store', 'rental', 'Hidden Legacy Rental', 'hidden-legacy', 1000, 10, 'active');
+UPDATE listings SET description = 'Soft cotton for everyday comfort' WHERE id = 'clothing';
+UPDATE listings SET stock = 0, track_inventory = 1 WHERE id = 'electronics';
+INSERT INTO listing_images (id, listing_id, image_url, position) VALUES ('photo', 'product', '/brand/rush-cart-logo.png', 0);
+INSERT INTO events (id, store_id, title, slug, starts_at, status) VALUES ('event', 'store', 'Summer Edit', 'summer-edit', '2026-09-30T00:00:00.000Z', 'published');
+INSERT INTO event_products (event_id, product_id) VALUES ('event', 'product'), ('event', 'beauty'), ('event', 'clothing'), ('event', 'electronics');
+INSERT INTO carts (id, token, user_id) VALUES ('cart', 'buyer-cart-token', 'buyer');
+INSERT INTO cart_items (id, cart_id, listing_id, quantity, unit_price) VALUES ('item', 'cart', 'product', 2, 1000);
+`);
+const base = 'http://localhost:5001';
+let log = '';
+const server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '-p', '5001', '-H', '127.0.0.1'], {
+  env: { ...process.env, NODE_ENV: 'production', TURSO_DATABASE_URL: url, TURSO_AUTH_TOKEN: '', RESEND_API_KEY: '', PAYSTACK_SECRET_KEY: '', CLOUDFLARE_ACCOUNT_ID: '', NEXT_PUBLIC_APP_URL: base, BETTER_AUTH_URL: base, SESSION_SECRET: 'local-audit-session-secret-not-production', BETTER_AUTH_SECRET: 'local-audit-session-secret-not-production', AUTH_RATE_LIMIT_DISABLED: 'false', REPLIT_DOMAINS: 'localhost:5001', REPLIT_DEV_DOMAIN: '', GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '' },
+  stdio: ['ignore', 'pipe', 'pipe'],
+});
+server.stdout.on('data', data => { log += data; }); server.stderr.on('data', data => { log += data; });
+after(async () => { server.kill('SIGTERM'); await new Promise(resolve => server.once('exit', resolve)); db.close(); rmSync(dir, { recursive: true, force: true }); });
+for (let attempt = 0; attempt < 80; attempt++) {
+  try { if ((await fetch(`${base}/manifest.webmanifest`)).ok) break; } catch { /* Booting. */ }
+  await new Promise(resolve => setTimeout(resolve, 250));
+  if (attempt === 79) throw new Error(`Audit server did not start: ${log}`);
 }
-console.log("all journeys hold together");
+async function page(route, cookie = '') { const response = await fetch(`${base}${route}`, { headers: { cookie }, redirect: 'manual' }); return { status: response.status, html: await response.text(), headers: response.headers }; }
+async function login(id) {
+  const response = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST', headers: { 'Content-Type': 'application/json', origin: base }, body: JSON.stringify({ email: `${id}@example.org`, password }) });
+  assert.equal(response.status, 200, await response.clone().text());
+  return response.headers.getSetCookie().map(cookie => cookie.split(';')[0]).join('; ');
+}
+let buyerCookie, sellerCookie, otherCookie;
+test('real password login returns account sessions', async () => { buyerCookie = await login('buyer'); sellerCookie = await login('seller'); otherCookie = await login('other'); assert.ok(buyerCookie.includes('session_token')); });
+test('public product, store, collection, legal and auth pages render', async () => {
+  for (const route of ['/', '/products', '/stores', '/people', '/events', '/@audit-store', '/listing/product', '/events/event', '/search?q=Jacket', '/cart', '/orders', '/settings', '/sign-in', '/sign-up', '/forgot-password', '/privacy', '/terms', '/cookies', '/faq', '/support']) {
+    const result = await page(route); assert.ok([200, 307].includes(result.status), `${route}: ${result.status}`); if (result.status === 200) assert.ok(result.html.includes('Rush Cart'), route);
+  }
+});
+test('category result state and data are aligned', async () => {
+  const result = await page('/products?category=cat_platform_fashion'); assert.equal(result.status, 200);
+  assert.ok(result.html.includes('Audit Jacket')); assert.ok(!result.html.includes('Audit Cream')); assert.ok(!result.html.includes('Hidden Legacy Rental')); assert.ok(result.html.includes('Fashion'));
+});
+test('product companion actions use the actual shop relationship for guest and buyer', async () => {
+  for (const cookie of ['', buyerCookie]) {
+    const result = await page('/listing/product', cookie);
+    assert.equal(result.status, 200);
+    assert.match(result.html, /Ask About This Product/);
+    assert.match(result.html, /href="\/@audit-store"[^>]*>Open Shop/);
+  }
+});
+test('multiple categories, descendants and empty selections filter correctly', async () => {
+  for (const [id, included, excluded] of [['fashion', 'Audit Shirt', 'Audit Headphones'], ['electronics', 'Audit Headphones', 'Audit Jacket'], ['beauty', 'Audit Cream', 'Audit Shirt']]) {
+    const result = await page(`/products?category=cat_platform_${id}`);
+    assert.equal(result.status, 200); assert.ok(result.html.includes(included)); assert.ok(!result.html.includes(excluded));
+  }
+  assert.ok((await page('/products?category=cat_platform_digital')).html.includes('No products in Digital yet'));
+});
+test('shop search and real filters stay scoped for guests and signed-in users', async () => {
+  for (const cookie of ['', buyerCookie, sellerCookie]) {
+    for (const [query, included, excluded] of [['q=Jacket', 'product', 'beauty'], ['q=cotton', 'clothing', 'product'], ['min=15&max=25', 'beauty', 'clothing'], ['stock=1', 'product', 'electronics']]) {
+      const result = await page(`/@audit-store?${query}`, cookie);
+      assert.equal(result.status, 200);
+      const catalogue = result.html.slice(result.html.indexOf('id="shop-catalogue"')).split('</section>')[0];
+      assert.ok(catalogue.includes(`data-product-card="${included}"`), query);
+      assert.ok(!catalogue.includes(`data-product-card="${excluded}"`), query);
+    }
+    assert.ok((await page('/@audit-store?q=no-match', cookie)).html.includes('No products match this selection'));
+  }
+});
+test('Rush Cart identity and hero replace old customer-facing branding', async () => {
+  const home = await page('/'); assert.match(home.html, /Get what you want/); assert.ok(!home.html.includes('Welcome to Rush Cart</text>'));
+  for (const route of ['/', '/products', '/@audit-store', '/listing/product']) {
+    const result = await page(route); assert.match(result.html, /<title>[^<]*Rush Cart/); assert.ok(!/LinkStore|Link Store/.test(result.html));
+  }
+  for (const route of ['/favicon.ico', '/icon.png', '/apple-icon.png', '/brand/rush-cart-icon.png']) assert.equal((await page(route)).status, 200);
+});
+test('removed commerce is inaccessible, including old listing detail', async () => {
+  for (const route of ['/food', '/rentals', '/property', '/cars', '/cargo', '/services', '/tickets', '/tickets/checkout', '/workspace/food', '/workspace/services', '/workspace/rentals', '/workspace/tickets', '/listing/legacy']) { const result = await page(route, sellerCookie); assert.ok(result.status === 404 || (result.status === 200 && result.html.includes('NEXT_HTTP_ERROR_FALLBACK;404')), `${route}: must render Not Found, never retired commerce`); }
+});
+test('seller pages render and category creation is hydrated', async () => {
+  for (const route of ['/workspace', '/workspace/listings', '/workspace/listings/product', '/workspace/listings/new?category=cat_platform_fashion', '/workspace/events', '/workspace/events/new', '/workspace/events/event', '/workspace/orders', '/workspace/customers', '/workspace/inventory', '/workspace/settings', '/workspace/finance']) assert.equal((await page(route, sellerCookie)).status, 200, route);
+  const category = await page('/workspace/listings?category=cat_platform_fashion', sellerCookie); assert.ok(category.html.includes('Audit Jacket')); const resultsHtml = category.html.slice(category.html.indexOf('<article class="ls-card'));
+  assert.ok(!resultsHtml.split('</main>')[0].includes('href="/workspace/listings/beauty"'));
+  
+   assert.ok(category.html.includes('/workspace/listings/new?category=cat_platform_fashion'));
+  const create = await page('/workspace/listings/new?category=cat_platform_fashion', sellerCookie); assert.ok(create.html.includes('New Fashion product')); assert.ok(create.html.includes('defaultCategoryId'));
+});
+test('normal accounts cannot enter seller management; anonymous access is gated', async () => {
+  const buyerPage = await page('/workspace/listings', buyerCookie);
+  assert.ok(buyerPage.status === 307 || buyerPage.html.includes('NEXT_REDIRECT')); assert.ok(!buyerPage.html.includes('href="/workspace/listings/product"'));
+  assert.equal((await page('/workspace')).status, 307);
+  assert.equal((await page('/admin', buyerCookie)).status, 307);
+});
+test('HTTP cart isolation resists another account replaying the cart token', async () => {
+  assert.ok((await page('/cart', `${buyerCookie}; ls_cart=buyer-cart-token`)).html.includes('Audit Jacket'));
+  assert.ok(!(await page('/cart', `${otherCookie}; ls_cart=buyer-cart-token`)).html.includes('Audit Jacket'));
+  assert.ok(!(await page('/cart', 'ls_cart=buyer-cart-token')).html.includes('Audit Jacket'));
+});
+test('logout invalidates actual session and clears account shopping cookies', async () => {
+  const response = await fetch(`${base}/logout`, { method: 'POST', headers: { cookie: buyerCookie, origin: base } }); assert.equal(response.status, 200);
+  const setCookies = response.headers.getSetCookie().join(';'); assert.ok(setCookies.includes('ls_cart=')); assert.ok(setCookies.includes('ls_orders='));
+  assert.equal((await page('/workspace', buyerCookie)).status, 307);
+  assert.ok(!(await page('/cart', `${buyerCookie}; ls_cart=buyer-cart-token`)).html.includes('Audit Jacket'));
+  await new Promise(resolve => setTimeout(resolve, 11000));
+  const signedInAgain = await login('buyer'); assert.ok((await page('/cart', signedInAgain)).html.includes('Audit Jacket'));
+});
+test('real browser selectors, consent and mobile/desktop geometry', async () => {
+  const { auditBrowser } = await import('./browser-audit.mjs');
+  await auditBrowser(base, sellerCookie, await login('buyer'));
+});
+test('production server logs contain no schema mismatch or runtime errors', () => { assert.ok(!/Database schema mismatch|TypeError:|SQLITE_ERROR|ReferenceError:/.test(log), log); });

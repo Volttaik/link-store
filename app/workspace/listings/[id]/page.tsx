@@ -121,6 +121,7 @@ export default async function EditListingPage({ params }: { params: Promise<{ id
       ) : null}
 
       <ListingForm
+        key={detail.id}
         listing={detail}
         categories={categories.map((category) => ({ id: category.id, name: category.name }))}
         currency={store.currency}

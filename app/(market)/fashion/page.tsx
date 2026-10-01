@@ -12,7 +12,7 @@ export default async function FashionPage({
   return (
     <BrowseSection
       slug="fashion"
-      description="Clothing, shoes and accessories from Link Store sellers."
+      description="Clothing, shoes and accessories from Rush Cart sellers."
       searchParams={await searchParams}
     />
   );

@@ -184,15 +184,14 @@ async function notifyBuyerOfUpdate(input: {
  */
 export function deriveFulfilmentMethod(
   items: Array<Pick<OrderItemRow, "item_type"> & { fulfilment?: string }>,
-): "delivery" | "pickup" | "digital" | "none" {
+): "delivery" | "pickup" | "none" {
   const modes = new Set(
     items
-      .filter((item) => item.item_type !== "ticket")
-      .map((item) => item.fulfilment ?? (item.item_type === "digital" ? "digital" : "shipping")),
+      .filter((item) => item.item_type === "product")
+      .map((item) => item.fulfilment ?? "shipping"),
   );
 
   if (modes.size === 0) return "none";
-  if ([...modes].every((mode) => mode === "digital")) return "digital";
   if (modes.has("shipping")) return "delivery";
   if (modes.has("pickup")) return "pickup";
   // Booking / on-site only: arranged in person, nothing to post or hand over.
@@ -491,7 +490,7 @@ export async function updateShipment(input: UpdateShipmentInput): Promise<Update
       [timestamp, timestamp, shipment.order_id],
     );
     await execute(
-      "UPDATE order_items SET fulfilment_status = 'fulfilled' WHERE order_id = ? AND item_type != 'digital'",
+      "UPDATE order_items SET fulfilment_status = 'fulfilled' WHERE order_id = ?",
       [shipment.order_id],
     );
   } else if (statusChanged && (input.status === "shipped" || input.status === "in_transit")) {

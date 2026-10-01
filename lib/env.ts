@@ -60,7 +60,8 @@ export const isPaystackConfigured = present(paystackConfig.secretKey);
 
 export const resendConfig = {
   apiKey: process.env.RESEND_API_KEY?.trim() ?? "",
-  from: process.env.RESEND_FROM_EMAIL?.trim() || "LINK STORE <onboarding@resend.dev>",
+  from: process.env.RESEND_FROM_EMAIL?.trim() ?? "",
+  replyTo: process.env.RESEND_REPLY_TO_EMAIL?.trim() ?? "",
 } as const;
 
 /**
@@ -113,6 +114,8 @@ export const platformConfig = {
  * app should not advertise.
  */
 export async function requestBaseUrl(): Promise<string> {
+  // Production links never trust a request's forwarded Host header.
+  if (process.env.NODE_ENV === "production") return platformConfig.appUrl;
   if (explicitAppUrl) return explicitAppUrl;
 
   try {

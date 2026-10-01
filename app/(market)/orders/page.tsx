@@ -109,7 +109,7 @@ export default async function BuyerOrdersPage() {
           title={user ? "No orders yet" : "Sign in to see your orders"}
           description={
             user
-              ? "Orders you place appear here with their tickets, download links and delivery status. If you checked out as a guest, look yours up below."
+              ? "Your orders appear here with receipts and delivery status. If you checked out as a guest, look yours up below."
               : "Guest orders can be opened with the email address and order number from your receipt."
           }
           action={

@@ -20,9 +20,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function migrate() {
-  if (process.env.NODE_ENV === "production") {
+  if (process.env.NODE_ENV === "production" || process.env.ENABLE_LOCAL_AUTH_MIGRATION !== "true" || process.env.TURSO_DATABASE_URL?.trim() && !process.env.TURSO_DATABASE_URL.startsWith("file:")) {
     return NextResponse.json(
-      { error: "Schema changes are applied with `npm run db:migrate` in production." },
+      { error: "Not available." },
       { status: 403 },
     );
   }

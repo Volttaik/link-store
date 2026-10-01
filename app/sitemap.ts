@@ -31,16 +31,10 @@ function browsePages(): MetadataRoute.Sitemap {
     { path: "/products", priority: 0.9 },
     { path: "/stores", priority: 0.8 },
     { path: "/events", priority: 0.8 },
-    { path: "/tickets", priority: 0.7 },
     { path: "/fashion", priority: 0.7 },
     { path: "/electronics", priority: 0.7 },
     { path: "/furniture", priority: 0.7 },
-    { path: "/food", priority: 0.7 },
-    { path: "/services", priority: 0.7 },
-    { path: "/digital", priority: 0.7 },
-    { path: "/cars", priority: 0.7 },
-    { path: "/rentals", priority: 0.7 },
-    { path: "/cargo", priority: 0.7 },
+    ...["privacy", "terms", "cookies", "faq", "support", "people"].map(slug => ({ path: `/${slug}`, priority: 0.5 })),
   ];
 
   return pages.map(({ path, priority }) => ({
@@ -60,7 +54,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       query<{ id: string; updated_at: string }>(
         `SELECT l.id, l.updated_at FROM listings l
            JOIN stores s ON s.id = l.store_id
-          WHERE l.status = 'active' AND s.is_published = 1
+          WHERE l.type = 'product' AND l.status = 'active' AND s.is_published = 1
           ORDER BY l.updated_at DESC LIMIT ?`,
         [LIMIT_PER_TYPE],
       ),

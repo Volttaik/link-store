@@ -60,13 +60,13 @@ export function ProfileCard({
           {/* The name is the doorway — links are never nested inside links. */}
           {href ? (
             <Link
-              className="block truncate text-[16px] leading-tight font-semibold text-foreground no-underline hover:underline"
+              className="block truncate text-[15px] leading-tight font-semibold text-foreground no-underline hover:underline"
               href={href}
             >
               {name}
             </Link>
           ) : (
-            <p className="truncate text-[16px] leading-tight font-semibold text-foreground">{name}</p>
+            <p className="truncate text-[15px] leading-tight font-semibold text-foreground">{name}</p>
           )}
           {handle ? (
             <p className="truncate text-[12.5px] text-muted">@{handle.replace(/^@/, "")}</p>

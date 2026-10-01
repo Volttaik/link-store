@@ -12,7 +12,7 @@
  * again here. That is deliberate: a module's label, its own route, its icon and
  * the words a search should find it by are declared **once**, so the side menu
  * cannot drift from the pages it points at, and a new module appears in the menu
- * by being declared as a module.
+ * by being declared as a definition.
  *
  * ## Why it is searchable
  *
@@ -32,11 +32,7 @@ export type WorkspaceContextKey =
   | "analytics"
   | "sales"
   | "listing"
-  | "services"
-  | "food"
   | "events"
-  | "rentals"
-  | "digital"
   | "drafts"
   | "inventory"
   | "orders"
@@ -71,15 +67,7 @@ export type NavContext = {
 };
 
 /** The catalogue modules in the order the menu lists them. */
-const MODULE_NAV_ORDER = [
-  "listing",
-  "drafts",
-  "food",
-  "services",
-  "events",
-  "rentals",
-  "digital",
-] as const;
+const MODULE_NAV_ORDER = ["listing", "drafts", "events"] as const;
 
 /**
  * The catalogue half of the rail, read straight from the module registry.
@@ -90,15 +78,15 @@ const MODULE_NAV_ORDER = [
  * unfinished work on the other, and never the same page.
  */
 const MODULE_NAV: WorkspaceNavItem[] = MODULE_NAV_ORDER.map((key) => {
-  const module = MODULE_MAP[key];
+  const definition = MODULE_MAP[key];
   return {
-    key: `module-${module.key}`,
-    label: module.label,
-    blurb: module.blurb,
-    href: module.href,
-    icon: module.icon,
-    context: module.key as WorkspaceContextKey,
-    keywords: module.keywords,
+    key: `module-${definition.key}`,
+    label: definition.label,
+    blurb: definition.blurb,
+    href: definition.href,
+    icon: definition.icon,
+    context: definition.key as WorkspaceContextKey,
+    keywords: definition.keywords,
   };
 });
 
@@ -171,7 +159,7 @@ export const WORKSPACE_NAV: WorkspaceNavItem[] = [
   {
     key: "messages",
     label: "Messages",
-    blurb: "Conversations about your listings.",
+    blurb: "Customer conversations.",
     href: "/messages",
     icon: "message",
     context: "messages",
@@ -204,7 +192,7 @@ export const ADMIN_NAV: WorkspaceNavItem[] = [
   {
     key: "admin-overview",
     label: "Overview",
-    blurb: "Everything on LINK STORE.",
+    blurb: "Everything on Rush Cart.",
     href: "/admin",
     icon: "dashboard",
     context: "dashboard",

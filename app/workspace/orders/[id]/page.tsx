@@ -19,8 +19,6 @@ import { requireStore } from "@/lib/auth";
 import {
   getOrderWithItems,
   listPaymentsForOrder,
-  listTicketsForOrder,
-  listDownloadsForOrder,
 } from "@/lib/server/commerce";
 import { getShipmentForOrder, listShipmentEvents } from "@/lib/server/shipments";
 import { queryOne } from "@/lib/db";
@@ -29,8 +27,6 @@ import {
   orderStatusTone,
   paymentStatusLabel,
   paymentStatusTone,
-  ticketStatusLabel,
-  ticketStatusTone,
 } from "@/lib/catalog";
 import { formatDateTime, humanize } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
@@ -42,21 +38,22 @@ export default async function WorkspaceOrderPage({ params }: { params: Promise<{
   const { id } = await params;
 
   // Ownership is enforced by the store filter, not by the id alone.
+  // The reference in the path may be the order's id or its human order number:
+  // emails link by order number so no internal identifier ever travels by
+  // mail. Either way the lookup stays scoped to this seller's own store.
   const order = await queryOne<{ id: string }>(
-    "SELECT id FROM orders WHERE id = ? AND store_id = ?",
-    [id, store.id],
+    "SELECT id FROM orders WHERE (id = ? OR order_number = ?) AND store_id = ?",
+    [id, id, store.id],
   );
   if (!order) notFound();
 
-  const detail = await getOrderWithItems(id);
+  const detail = await getOrderWithItems(order.id);
   if (!detail) notFound();
 
-  const [payments, tickets, downloads, emails, shipment] = await Promise.all([
-    listPaymentsForOrder(id),
-    listTicketsForOrder(id),
-    listDownloadsForOrder(id),
-    listEmailsForOrder(id),
-    getShipmentForOrder(id),
+  const [payments, emails, shipment] = await Promise.all([
+    listPaymentsForOrder(order.id),
+    listEmailsForOrder(order.id),
+    getShipmentForOrder(order.id),
   ]);
 
   const shipmentEvents = shipment ? await listShipmentEvents(shipment.id) : [];
@@ -158,47 +155,6 @@ export default async function WorkspaceOrderPage({ params }: { params: Promise<{
             </Card.Content>
           </Card>
 
-          {tickets.length > 0 ? (
-            <Card className="ls-elev-2">
-              <Card.Header className="pb-0">
-                <p className="text-sm font-semibold">
-                  Tickets issued ({tickets.length})
-                </p>
-              </Card.Header>
-              <Card.Content className="gap-2">
-                {tickets.map((ticket) => (
-                  <div key={ticket.id} className="flex items-center justify-between gap-3 text-sm">
-                    <span className="font-mono text-xs">{ticket.code}</span>
-                    <StatusChip
-                      label={ticketStatusLabel(ticket.status)}
-                      tone={ticketStatusTone(ticket.status)}
-                    />
-                  </div>
-                ))}
-              </Card.Content>
-            </Card>
-          ) : null}
-
-          {downloads.length > 0 ? (
-            <Card className="ls-elev-2">
-              <Card.Header className="pb-0">
-                <p className="text-sm font-semibold">Digital delivery</p>
-              </Card.Header>
-              <Card.Content className="gap-2">
-                {downloads.map((download) => (
-                  <div key={download.id} className="flex items-center justify-between gap-3 text-sm">
-                    <span className="text-xs text-muted">
-                      Grant {download.id.slice(-6)}
-                    </span>
-                    <span className="text-xs text-muted">
-                      {download.download_count} / {download.max_downloads} downloads
-                    </span>
-                  </div>
-                ))}
-              </Card.Content>
-            </Card>
-          ) : null}
-
           <Card className="ls-elev-2">
             <Card.Header className="pb-0">
               <p className="text-sm font-semibold">Payment records</p>
@@ -297,7 +253,7 @@ export default async function WorkspaceOrderPage({ params }: { params: Promise<{
               {detail.status !== "cancelled" && detail.payment_status !== "paid" ? (
                 <ActionButton
                   action={setOrderStatusAction.bind(null, detail.id, "cancelled")} variant="danger-soft"
-                  confirm="Cancel this order? Its tickets will be voided."
+                  confirm="Cancel this order?"
                   fullWidth
                 >
                   Cancel order
@@ -309,14 +265,14 @@ export default async function WorkspaceOrderPage({ params }: { params: Promise<{
                   <ActionButton
                     action={refundOrderAction.bind(null, detail.id)}
                     variant="danger-soft"
-                    confirm="Refund this order? The money is returned through Paystack, its tickets are voided and its stock comes back."
+                    confirm="Refund this order? The payment will be returned and its stock restored."
                     fullWidth
                   >
                     Refund this order
                   </ActionButton>
                   <p className="text-xs text-muted">
                     The refund goes back to the buyer through Paystack. Once accepted, the order is
-                    closed, its tickets are void and the items return to stock.
+                    closed and the items return to stock.
                   </p>
                 </>
               ) : null}
@@ -362,7 +318,7 @@ export default async function WorkspaceOrderPage({ params }: { params: Promise<{
                   <div key={email.id} className="space-y-1 rounded-xl bg-surface-secondary/50 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-xs font-medium capitalize">
-                        {email.kind === "tickets" ? "Tickets" : humanize(email.kind)}
+                        {humanize(email.kind)}
                       </span>
                       <Chip size="sm" variant="secondary"
                         color={

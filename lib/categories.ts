@@ -22,25 +22,43 @@
 
 import type { CategoryRow } from "./types";
 
-/** Which module a category belongs to. Inherited down the tree, never repeated. */
-export type CategoryKind =
-  | "general"
-  | "product"
-  | "food"
-  | "service"
-  | "event"
-  | "digital"
-  | "rental";
+/** Retired catch-alls are readable historical data, never selectable categories. */
+export function isGenericCategory(value?: string | null): boolean {
+  return ["other", "others", "miscellaneous", "misc", "uncategorized", "uncategorised"].includes((value ?? "").toLowerCase().replace(/[^a-z]/g, ""));
+}
+export function isSupportedCategory(category: { name: string; slug: string }): boolean {
+  return !isGenericCategory(category.name) && !isGenericCategory(category.slug);
+}
 
-export const CATEGORY_KINDS: CategoryKind[] = [
-  "general",
-  "product",
-  "food",
-  "service",
-  "event",
-  "digital",
-  "rental",
-];
+/** Canonical platform reference data; db/seed.sql mirrors these stable ids. */
+export const PRODUCT_CATEGORY_DEFINITIONS = [
+  { slug: "fashion", name: "Fashion", icon: "fashion", parent: null },
+  { slug: "clothing", name: "Clothing", icon: "fashion", parent: "fashion" },
+  { slug: "shoes", name: "Shoes", icon: "fashion", parent: "fashion" },
+  { slug: "accessories", name: "Accessories", icon: "tag", parent: null },
+  { slug: "electronics", name: "Electronics", icon: "electronics", parent: null },
+  { slug: "beauty", name: "Beauty", icon: "beauty", parent: null },
+  { slug: "home", name: "Home", icon: "home", parent: null },
+  { slug: "sports", name: "Sports", icon: "tag", parent: null },
+  { slug: "collectibles", name: "Collectibles", icon: "tag", parent: null },
+  { slug: "digital", name: "Digital", icon: "digital", parent: null },
+  { slug: "books", name: "Books & stationery", icon: "tag", parent: null },
+  { slug: "toys", name: "Toys & games", icon: "tag", parent: null },
+  { slug: "baby", name: "Baby & kids", icon: "tag", parent: null },
+  { slug: "pets", name: "Pet supplies", icon: "tag", parent: null },
+  { slug: "health", name: "Health & wellness", icon: "tag", parent: null },
+  { slug: "grocery", name: "Grocery & pantry", icon: "tag", parent: null },
+  { slug: "garden", name: "Garden & outdoors", icon: "tag", parent: null },
+  { slug: "tools", name: "Tools & hardware", icon: "tag", parent: null },
+  { slug: "automotive", name: "Automotive accessories", icon: "tag", parent: null },
+  { slug: "arts", name: "Arts & crafts", icon: "tag", parent: null },
+  { slug: "office", name: "Office supplies", icon: "tag", parent: null },
+  { slug: "music", name: "Musical instruments", icon: "tag", parent: null },
+] as const;
+
+/** Which module a category belongs to. Inherited down the tree, never repeated. */
+export type CategoryKind = "general" | "product";
+export const CATEGORY_KINDS: CategoryKind[] = ["general", "product"];
 
 export function isCategoryKind(value: string | null | undefined): value is CategoryKind {
   return CATEGORY_KINDS.includes((value ?? "") as CategoryKind);
@@ -83,6 +101,7 @@ function toNode(row: CategoryRow, own: boolean): CategoryNode {
  * parent was never fetched.
  */
 export function buildCategoryTree(rows: CategoryRow[]): CategoryNode[] {
+  rows = rows.filter(isSupportedCategory);
   const nodes = new Map<string, CategoryNode>();
   for (const row of rows) nodes.set(row.id, toNode(row, row.store_id !== null));
 

@@ -44,7 +44,6 @@ export type WorkspaceContextData = {
   threads: ContextThread[];
   counts: {
     products: number;
-    services: number;
     listings: number;
     inventory: number;
     orders: number;
@@ -62,7 +61,6 @@ export type WorkspaceContextData = {
   /** Row counts per module key. */
   moduleCounts: Record<string, number>;
   products: ContextItem[];
-  services: ContextItem[];
   inventory: ContextItem[];
   orders: ContextItem[];
   customers: ContextItem[];

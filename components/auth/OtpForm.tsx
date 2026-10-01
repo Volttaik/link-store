@@ -275,7 +275,7 @@ export function OtpForm({
             return (
               <span
                 key={`${index}-${digit}`}
-                className={`flex h-13 min-w-0 flex-1 items-center justify-center rounded-xl bg-surface text-[21px] font-semibold tabular-nums text-foreground transition-[transform,box-shadow,background-color] duration-150 ${
+                className={`flex h-13 min-w-0 flex-1 items-center justify-center rounded-xl bg-surface text-[19px] font-semibold tabular-nums text-foreground transition-[transform,box-shadow,background-color] duration-150 ${
                   active ? "ls-edge motion-safe:scale-[1.04]" : "shadow-elev-1"
                 } ${problem ? "bg-danger/10 shadow-none" : ""} ${
                   digit && !problem ? "motion-safe:animate-[ls-otp-land_0.22s_cubic-bezier(0.34,1.56,0.64,1)]" : ""

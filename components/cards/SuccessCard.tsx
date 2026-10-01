@@ -73,7 +73,7 @@ export function SuccessCard({
       </div>
 
       <div className="flex max-w-xl flex-col items-center gap-2">
-        <h2 className="text-[24px] leading-tight font-semibold tracking-tight text-foreground">
+        <h2 className="text-[20px] leading-tight font-semibold tracking-tight text-foreground">
           {title}
         </h2>
         <p className="text-[14px] leading-relaxed text-muted">{message}</p>

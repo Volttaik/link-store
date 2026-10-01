@@ -214,17 +214,21 @@ export function ActionButton({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
   const dialog = useOverlayState();
 
   async function run() {
-    setFailed(false);
+    setFailure(null);
     try {
-      await action();
-      if (typeof window !== "undefined" && confirm) window.location.reload();
-      else router.refresh();
+      const result = await action();
+      if (result && typeof result === "object" && "ok" in result && result.ok === false) {
+        setFailure("error" in result && typeof result.error === "string" ? result.error : "That action failed. Try again.");
+        return;
+      }
+      dialog.close();
+      router.refresh();
     } catch {
-      setFailed(true);
+      setFailure("That action failed. Try again.");
     }
   }
 
@@ -232,7 +236,7 @@ export function ActionButton({
     <Button
       variant={variant}
       size={size}
-      isDisabled={isDisabled}
+      isDisabled={isDisabled || pending}
       isPending={pending}
       fullWidth={fullWidth}
       onPress={confirm ? () => dialog.open() : () => startTransition(run)}
@@ -245,7 +249,7 @@ export function ActionButton({
     return (
       <span className="inline-flex flex-col items-start gap-1">
         {button}
-        {failed ? <span className="text-xs text-danger">That action failed. Try again.</span> : null}
+        {failure ? <span role="alert" className="text-xs text-danger">{failure}</span> : null}
       </span>
     );
   }
@@ -253,6 +257,7 @@ export function ActionButton({
   return (
     <>
       {button}
+      {failure ? <span role="alert" className="text-xs text-danger">{failure}</span> : null}
       <ConfirmDialog
         confirmLabel={confirmLabel}
         description={confirm}

@@ -1,15 +1,17 @@
 {
-  "name": "link-store",
+  "name": "rush-cart",
   "version": "1.0.0",
   "private": true,
-  "description": "LINK STORE — One link. Everything you sell.",
+  "description": "Rush Cart — Discover products. Shop independent stores.",
   "scripts": {
     "postinstall": "node scripts/patch-heroui-rsc.mjs",
     "dev": "next dev -p 5000 -H 0.0.0.0",
     "build": "next build",
     "start": "next start -p 5000 -H 0.0.0.0",
-    "lint": "next lint",
+    "lint": "eslint app components lib middleware.ts next.config.mjs",
     "typecheck": "tsc --noEmit",
+    "test": "node --test scripts/platform.test.mjs",
+    "test:journeys": "node --test scripts/journeys.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "db:seed": "node scripts/seed.mjs"
   },
@@ -34,6 +36,7 @@
     "react-dom": "19.1.1",
     "server-only": "^0.0.1",
     "tailwind-variants": "3.3.1",
+    "web-push": "^3.6.7",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -43,6 +46,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.1.17",
     "@types/react-dom": "^19.1.9",
+    "@types/web-push": "^3.6.4",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.39.0",
     "eslint-config-next": "15.5.25",

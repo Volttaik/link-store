@@ -1,8 +1,8 @@
 import { BrowseSection, type RawSearchParams } from "@/components/marketplace/BrowseSection";
 
 export const metadata = {
-  title: "All products",
-  description: "Every published listing on Link Store: physical goods, fashion, electronics and more.",
+  title: "Marketplace",
+  description: "Every published listing on Rush Cart: physical goods, fashion, electronics and more.",
 };
 
 export const dynamic = "force-dynamic";
@@ -15,8 +15,8 @@ export default async function ProductsPage({
   return (
     <BrowseSection
       slug="products"
-      label="All products"
-      description="Everything published across Link Store storefronts."
+      label="Marketplace"
+      description="Everything published across Rush Cart storefronts."
       searchParams={await searchParams}
     />
   );

@@ -28,10 +28,8 @@ export async function StoreBrowseGrid({
     category,
     // Only stores with something to show — an empty storefront is a dead end.
     onlyWithListings: true,
-    sort,
-    // Shop cards lead with the seller's own product photography, which is what
-    // tells a shopper what a shop is before they open it.
     withGallery: true,
+    sort,
     limit: PER_PAGE,
     offset: (page - 1) * PER_PAGE,
   } as const;
@@ -47,12 +45,11 @@ export async function StoreBrowseGrid({
           />
         ) : (
           <>
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(19rem,1fr))] gap-5">
-              {stores.map((store, index) => (
+            <div className="grid grid-cols-1 gap-x-14 gap-y-20 lg:grid-cols-2">
+              {stores.map((store) => (
                 <div
-                  className="motion-safe:animate-settle"
+                  className="min-w-0"
                   key={store.id}
-                  style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
                 >
                   <ShopCard store={store} />
                 </div>
@@ -68,8 +65,8 @@ export async function StoreBrowseGrid({
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-8 sm:px-6">
       <PageHeader
-        title={search ? `Shops matching “${search}”` : "Shops on Link Store"}
-        description="Open shops with published listings."
+        title={search ? `Shops matching “${search}”` : "Shops on Rush Cart"}
+        
         actions={
           <ButtonLink href="/sign-up" size="sm" variant="primary">
             Open your shop
@@ -95,12 +92,11 @@ export async function StoreBrowseGrid({
         />
       ) : (
         <>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(19rem,1fr))] gap-5">
-            {stores.map((store, index) => (
+          <div className="grid grid-cols-1 gap-x-14 gap-y-20 lg:grid-cols-2">
+            {stores.map((store) => (
               <div
-                className="motion-safe:animate-settle"
+                className="min-w-0"
                 key={store.id}
-                style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
               >
                 <ShopCard store={store} />
               </div>

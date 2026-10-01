@@ -77,7 +77,7 @@ function ResetCard({
           <span className="flex items-start gap-3">
             {status}
             <span className="flex min-w-0 flex-col gap-1.5">
-              <h1 className="text-[20px] leading-tight font-semibold tracking-tight text-foreground">
+              <h1 className="text-[17.5px] leading-tight font-semibold tracking-tight text-foreground">
                 {title}
               </h1>
               <p className="text-[13px] leading-relaxed text-muted">{description}</p>

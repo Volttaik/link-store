@@ -117,7 +117,7 @@ export const isGoogleEnabled = Boolean(
 );
 
 export const auth = betterAuth({
-  appName: "LINK STORE",
+  appName: "Rush Cart",
   baseURL: platformConfig.appUrl,
   secret: process.env.BETTER_AUTH_SECRET?.trim() || sessionSecret,
   database: authDb,
@@ -143,7 +143,7 @@ export const auth = betterAuth({
      * Password reset, end to end.
      *
      * The engine issues a single-use, time-limited token and hands it here;
-     * the message is composed in LINK STORE's own shell and the link points at
+     * the message is composed in Rush Cart's own shell and the link points at
      * the platform's own reset screen (`/reset-password?token=…`) rather than
      * the engine's bare callback, so the person who clicked it lands in the
      * product instead of on a redirect hop.
@@ -197,7 +197,7 @@ export const auth = betterAuth({
    * One identity table, mapped onto the one the platform already had.
    *
    * The engine writes its own columns (`users`, `sessions`) using the names
-   * LINK STORE has always used, so every `stores.user_id`, every order, cart and
+   * Rush Cart has always used, so every `stores.user_id`, every order, cart and
    * conversation keeps pointing at the same row it always did — no copy, no
    * second user store to keep in step, no rewritten foreign keys. Better Auth
    * still owns the table: it creates the schema, its value shapes (ISO timestamps,
@@ -213,7 +213,7 @@ export const auth = betterAuth({
       image: "avatar_url",
     },
     additionalFields: {
-      // Who someone is inside LINK STORE. Server-owned: a client cannot set it.
+      // Who someone is inside Rush Cart. Server-owned: a client cannot set it.
       role: {
         type: "string",
         required: false,

@@ -111,14 +111,14 @@ export default async function DraftsPage({
 
       <div className="flex flex-wrap items-center gap-x-8 gap-y-3 rounded-2xl ls-elev-2 bg-surface px-5 py-4">
         <span className="flex items-baseline gap-2">
-          <span className="text-[24px] leading-none font-semibold tabular-nums text-foreground">
+          <span className="text-[20px] leading-none font-semibold tabular-nums text-foreground">
             {formatNumber(visible.length)}
           </span>
           <span className="text-[13px] text-muted">in this view</span>
         </span>
         <span className="hidden h-8 w-px bg-border sm:block" />
         <span className="flex items-baseline gap-2">
-          <span className="text-[24px] leading-none font-semibold tabular-nums text-foreground">
+          <span className="text-[20px] leading-none font-semibold tabular-nums text-foreground">
             {formatNumber(ready)}
           </span>
           <span className="text-[13px] text-muted">with a photo and a price</span>
@@ -164,13 +164,13 @@ export default async function DraftsPage({
           title={rows.length === 0 ? "No drafts" : "Nothing in this view"}
           description={
             rows.length === 0
-              ? "Drafts appear here the moment you start something and save it without publishing: a product, a service, a menu item, a rental or an event. Adding through Listing publishes immediately, so use any other module to begin something unfinished."
+              ? "Save a product or Event as a draft while you are preparing it. Publish when it is ready."
               : "Your filters exclude every draft. Clear them to see them all again."
           }
           action={
             rows.length === 0 ? (
-              <ButtonLink href="/workspace/services/new" variant="primary">
-                Start a service
+              <ButtonLink href="/workspace/listings/new" variant="primary">
+                Create a product
               </ButtonLink>
             ) : (
               <ButtonLink href="/workspace/drafts" variant="outline">
@@ -269,7 +269,7 @@ function DraftCard({ row }: { row: DraftRow }) {
 }
 
 function listingRow(listing: ListingCardData): DraftRow {
-  const module = moduleForListingType(listing.type);
+  const definition = moduleForListingType(listing.type);
   const missing: string[] = [];
   if (!listing.imageUrl) missing.push("a photo");
   if (listing.price <= 0) missing.push("a price");
@@ -277,8 +277,8 @@ function listingRow(listing: ListingCardData): DraftRow {
   return {
     id: listing.id,
     title: listing.title,
-    moduleKey: module?.key ?? "listing",
-    moduleLabel: module?.label ?? listing.type,
+    moduleKey: definition?.key ?? "listing",
+    moduleLabel: definition?.label ?? listing.type,
     editHref: `/workspace/listings/${listing.id}`,
     kind: "listing",
     updatedAt: listing.createdAt,
@@ -293,7 +293,7 @@ function listingRow(listing: ListingCardData): DraftRow {
 function eventRow(event: EventCardData): DraftRow {
   const missing: string[] = [];
   if (!event.coverImageUrl) missing.push("a cover image");
-  if (event.ticketsTotal === 0) missing.push("ticket types");
+  if (event.productCount === 0) missing.push("products");
 
   return {
     id: event.id,
@@ -305,9 +305,8 @@ function eventRow(event: EventCardData): DraftRow {
     updatedAt: event.startsAt,
     imageUrl: event.coverImageUrl,
     hasPhoto: Boolean(event.coverImageUrl),
-    hasPrice: event.minPrice !== null,
-    priceLabel:
-      event.minPrice !== null ? `from ${formatMoney(event.minPrice, event.currency)}` : null,
+    hasPrice: true,
+    priceLabel: `${event.productCount} products`,
     missing,
   };
 }

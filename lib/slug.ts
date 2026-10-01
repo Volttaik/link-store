@@ -36,7 +36,7 @@ export function handleError(handle: string): string | null {
   if (!HANDLE_PATTERN.test(value)) {
     return "Use lowercase letters, numbers, and . _ - only (must start and end with a letter or number).";
   }
-  if (RESERVED_HANDLES.has(value)) return "That handle is reserved by Link Store.";
+  if (RESERVED_HANDLES.has(value)) return "That handle is reserved by Rush Cart.";
   return null;
 }
 

@@ -113,7 +113,7 @@ export default async function InventoryPage() {
             <span className="flex size-7 items-center justify-center rounded-lg bg-warning/15 text-warning">
               <Icon name="alert" size={15} />
             </span>
-            <h2 className="text-[16px] font-semibold tracking-tight text-foreground">
+            <h2 className="text-[15px] font-semibold tracking-tight text-foreground">
               Needs attention
             </h2>
             <span className="text-[13px] text-muted">
@@ -139,7 +139,7 @@ export default async function InventoryPage() {
           <span className="flex size-7 items-center justify-center rounded-lg bg-surface-secondary text-muted">
             <Icon name="products" size={15} />
           </span>
-          <h2 className="text-[16px] font-semibold tracking-tight text-foreground">
+          <h2 className="text-[15px] font-semibold tracking-tight text-foreground">
             {attention.length > 0 ? "Everything tracked" : "Tracked stock"}
           </h2>
           <span className="text-[13px] text-muted">{formatNumber(totalTracked)} listings</span>
@@ -201,7 +201,7 @@ export default async function InventoryPage() {
       {/* Movements are a history, so they read as a timeline rather than a table:
           a line down the left, each change hanging off it. */}
       <section className="space-y-3">
-        <h2 className="text-[16px] font-semibold tracking-tight text-foreground">
+        <h2 className="text-[15px] font-semibold tracking-tight text-foreground">
           Movement history
         </h2>
 
@@ -287,7 +287,7 @@ function Health({
 
   return (
     <div>
-      <p className={`text-[24px] leading-none font-semibold tabular-nums ${colour}`}>{value}</p>
+      <p className={`text-[20px] leading-none font-semibold tabular-nums ${colour}`}>{value}</p>
       <p className="mt-1.5 text-[12.5px] text-muted">{label}</p>
     </div>
   );

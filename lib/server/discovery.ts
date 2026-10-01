@@ -43,7 +43,7 @@ export type StoreCard = {
   name: string;
   tagline: string | null;
   logoUrl: string | null;
-  bannerUrl: string | null;
+  description: string | null;
   primaryCategory: string | null;
   city: string | null;
   country: string | null;
@@ -63,7 +63,7 @@ type StoreCardRow = {
   name: string;
   tagline: string | null;
   logo_url: string | null;
-  banner_url: string | null;
+  description: string | null;
   primary_category: string | null;
   city: string | null;
   country: string | null;
@@ -79,7 +79,7 @@ function mapStoreCard(row: StoreCardRow): StoreCard {
     name: row.name,
     tagline: row.tagline,
     logoUrl: row.logo_url,
-    bannerUrl: row.banner_url,
+    description: row.description,
     primaryCategory: row.primary_category,
     city: row.city,
     country: row.country,
@@ -114,7 +114,7 @@ async function attachGalleries(
               WHERE li.listing_id = l.id
               ORDER BY li.position ASC, li.created_at ASC LIMIT 1) AS image_url
      FROM listings l
-     WHERE l.store_id IN (${placeholders}) AND l.status = 'active'
+     WHERE l.store_id IN (${placeholders}) AND l.type = 'product' AND l.status = 'active'
      ORDER BY l.created_at DESC`,
     cards.map((card) => card.id),
   );
@@ -138,10 +138,10 @@ async function attachGalleries(
 }
 
 const STORE_CARD_SELECT = `
-  SELECT s.id, s.slug, s.name, s.tagline, s.logo_url, s.banner_url, s.primary_category,
+  SELECT s.id, s.slug, s.name, s.tagline, s.logo_url, s.description, s.primary_category,
          s.city, s.country, s.created_at,
-         (SELECT COUNT(*) FROM listings l WHERE l.store_id = s.id) AS listing_count,
-         (SELECT COUNT(*) FROM listings l WHERE l.store_id = s.id AND l.status = 'active') AS published_listing_count
+         (SELECT COUNT(*) FROM listings l WHERE l.store_id = s.id AND l.type = 'product') AS listing_count,
+         (SELECT COUNT(*) FROM listings l WHERE l.store_id = s.id AND l.type = 'product' AND l.status = 'active') AS published_listing_count
   FROM stores s`;
 
 export async function listStores(input: {
@@ -175,12 +175,12 @@ export async function listStores(input: {
   }
   if (input.onlyWithListings) {
     conditions.push(
-      "EXISTS (SELECT 1 FROM listings l WHERE l.store_id = s.id AND l.status = 'active')",
+      "EXISTS (SELECT 1 FROM listings l WHERE l.store_id = s.id AND l.type = 'product' AND l.status = 'active')",
     );
   }
   if (input.listingCategoryId) {
     conditions.push(
-      "EXISTS (SELECT 1 FROM listings l WHERE l.store_id = s.id AND l.status = 'active' AND l.category_id = ?)",
+      "EXISTS (SELECT 1 FROM listings l WHERE l.store_id = s.id AND l.type = 'product' AND l.status = 'active' AND l.category_id = ?)",
     );
     args.push(input.listingCategoryId);
   }
@@ -224,12 +224,12 @@ export async function countStores(input: {
   }
   if (input.onlyWithListings) {
     conditions.push(
-      "EXISTS (SELECT 1 FROM listings l WHERE l.store_id = s.id AND l.status = 'active')",
+      "EXISTS (SELECT 1 FROM listings l WHERE l.store_id = s.id AND l.type = 'product' AND l.status = 'active')",
     );
   }
   if (input.listingCategoryId) {
     conditions.push(
-      "EXISTS (SELECT 1 FROM listings l WHERE l.store_id = s.id AND l.status = 'active' AND l.category_id = ?)",
+      "EXISTS (SELECT 1 FROM listings l WHERE l.store_id = s.id AND l.type = 'product' AND l.status = 'active' AND l.category_id = ?)",
     );
     args.push(input.listingCategoryId);
   }
@@ -324,9 +324,9 @@ export async function getCategoryMarketplace(categoryId: string): Promise<{
     listStores({
       onlyWithListings: true,
       listingCategoryId: categoryId,
+      withGallery: true,
       sort: "listings",
       limit: 8,
-      withGallery: true,
     }),
     listEvents({
       status: "published",
@@ -420,7 +420,7 @@ export async function getStorefront(slug: string): Promise<Storefront | null> {
 
   // The shop leads with its primary design type; the rest keep the catalogue's
   // order so every storefront reads consistently.
-  const order: ShopDesignType[] = ["food", "products", "services", "digital", "rentals", "events"];
+  const order: ShopDesignType[] = ["products", "events"];
   const orderedDesigns = [
     designType,
     ...order.filter((design) => design !== designType),
@@ -472,10 +472,10 @@ export async function storeNeighbourhood(storeId: string, limit = 4): Promise<St
   return query<StoreCardRow>(
     `${STORE_CARD_SELECT}
      WHERE s.is_published = 1 AND s.primary_category = ? AND s.id != ?
-       AND EXISTS (SELECT 1 FROM listings l WHERE l.store_id = s.id AND l.status = 'active')
+       AND EXISTS (SELECT 1 FROM listings l WHERE l.store_id = s.id AND l.type = 'product' AND l.status = 'active')
      ORDER BY published_listing_count DESC LIMIT ?`,
     [store.primary_category, storeId, limit],
-  ).then((rows) => rows.map(mapStoreCard));
+  ).then((rows) => attachGalleries(rows.map(mapStoreCard)));
 }
 
 // --- Admin ------------------------------------------------------------------
@@ -502,11 +502,11 @@ export async function listAllStoresForAdmin(input: {
   const rows = await query<
     StoreCardRow & { owner_email: string; owner_name: string; is_published: number }
   >(
-    `SELECT s.id, s.slug, s.name, s.tagline, s.logo_url, s.banner_url, s.primary_category,
+    `SELECT s.id, s.slug, s.name, s.tagline, s.logo_url, s.description, s.primary_category,
             s.city, s.country, s.created_at, s.is_published,
             u.email AS owner_email, u.name AS owner_name,
-            (SELECT COUNT(*) FROM listings l WHERE l.store_id = s.id) AS listing_count,
-            (SELECT COUNT(*) FROM listings l WHERE l.store_id = s.id AND l.status = 'active') AS published_listing_count
+            (SELECT COUNT(*) FROM listings l WHERE l.store_id = s.id AND l.type = 'product') AS listing_count,
+            (SELECT COUNT(*) FROM listings l WHERE l.store_id = s.id AND l.type = 'product' AND l.status = 'active') AS published_listing_count
      FROM stores s JOIN users u ON u.id = s.user_id
      ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""}
      ORDER BY s.created_at DESC LIMIT ? OFFSET ?`,

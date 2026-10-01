@@ -276,7 +276,7 @@ export function CheckoutForm({
           </Button>
 
           <p className="text-xs text-muted">
-            You will be taken to Paystack to complete payment. Link Store never sees or stores your
+            You will be taken to Paystack to complete payment. Rush Cart never sees or stores your
             card details. Your order is confirmed only after our server verifies the payment.
           </p>
         </form>

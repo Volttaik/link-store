@@ -3,7 +3,7 @@ import type { RawSearchParams } from "@/components/marketplace/BrowseSection";
 
 export const metadata = {
   title: "Stores",
-  description: "Browse storefronts on Link Store, every seller's own link.",
+  description: "Browse storefronts on Rush Cart, every seller's own link.",
 };
 
 export const dynamic = "force-dynamic";

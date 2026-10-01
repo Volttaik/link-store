@@ -88,11 +88,11 @@ export function Figure({
   const valueSize =
     size === "lg"
       ? length > 12
-        ? "text-[22px]"
-        : "text-[30px]"
-      : length > 14
         ? "text-[18px]"
-        : "text-[22px]";
+        : "text-[24px]"
+      : length > 14
+        ? "text-[15px]"
+        : "text-[18px]";
 
   return (
     <div className="flex min-w-0 flex-col gap-2">

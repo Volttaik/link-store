@@ -112,7 +112,7 @@ export default async function CheckoutCallbackPage({
           succeeded
             ? chatRequest
               ? "Your payment is confirmed and the seller has been notified in your conversation."
-              : "Your order is confirmed and anything digital has been released."
+              : "Your order is confirmed and ready for the seller."
             : "The payment was not verified as successful, so nothing has been charged or delivered."
         }
         rows={receiptRows}
@@ -157,7 +157,7 @@ export default async function CheckoutCallbackPage({
           <InfoNote tone="warning" title="What happened">
             {result.error}
             {!paymentsConfigured()
-              ? " Payments are not configured on this deployment, so no card was charged."
+              ? " Payments are currently unavailable. Contact the seller for help."
               : ""}
           </InfoNote>
         ) : null}

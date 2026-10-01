@@ -30,7 +30,6 @@ export function StoreOnboardingForm({
   const [handle, setHandle] = useState("");
   const [touchedHandle, setTouchedHandle] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [bannerUrl, setBannerUrl] = useState<string | null>(null);
 
   // Derive the handle from the store name until the seller edits it themselves.
   const effectiveHandle = touchedHandle ? handle : slugify(name).slice(0, 30);
@@ -121,26 +120,7 @@ export function StoreOnboardingForm({
         <Field defaultValue="Nigeria" label="Country" name="country" />
       </div>
 
-      {/*
-        The shop's identity images, uploaded here and now rather than pasted as
-        links later: the cover sits behind the shop's name on its storefront.
-      */}
-      <div className="grid gap-5 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <p className="text-sm font-medium">Shop cover</p>
-          <p className="text-xs text-muted">
-            The wide image behind your shop&apos;s identity. You can change it any time in settings.
-          </p>
-          <SingleImageUploader
-            value={bannerUrl}
-            onChange={(image) => setBannerUrl(image?.url ?? null)}
-            folder="store"
-            label="Upload cover"
-            previewClassName="h-16 w-28"
-          />
-          <input name="bannerUrl" type="hidden" value={bannerUrl ?? ""} />
-        </div>
-
+      <div>
         <div className="space-y-1.5">
           <p className="text-sm font-medium">Shop logo</p>
           <p className="text-xs text-muted">Your mark, shown beside your name everywhere.</p>

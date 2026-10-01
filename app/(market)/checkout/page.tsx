@@ -177,7 +177,6 @@ export default async function CheckoutPage({
 
   const items = selected.items;
   const hasShipping = items.some((item) => item.fulfilment === "shipping");
-  const digitalOnly = items.every((item) => item.fulfilment === "digital" || item.fulfilment === "ticket");
   const isPickup = !hasShipping && items.some((item) => item.fulfilment === "pickup");
   const multiStore = view.storeCount > 1;
 
@@ -204,7 +203,7 @@ export default async function CheckoutPage({
       ) : null}
 
       {!isPaystackConfigured ? (
-        <InfoNote tone="warning" title="Payments are not configured on this deployment">
+        <InfoNote tone="warning" title="Payments are temporarily unavailable">
           No <code>PAYSTACK_SECRET_KEY</code> is set, so no card can be charged. Your order will be
           created as unpaid rather than being marked as a successful payment. Add your Paystack keys
           to accept real payments.
@@ -303,12 +302,7 @@ export default async function CheckoutPage({
             </Card.Content>
           </Card>
 
-          {digitalOnly ? (
-            <InfoNote tone="primary" title="Instant delivery">
-              Nothing needs shipping. Your tickets and download links appear on your order the moment
-              payment is verified.
-            </InfoNote>
-          ) : isPickup ? (
+          {isPickup ? (
             <InfoNote title="Collect in person">
               This order is picked up, not delivered — no delivery fee is charged.
               {settings.pickup_address || settings.pickup_location_name

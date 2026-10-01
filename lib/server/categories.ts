@@ -9,8 +9,8 @@
 
 import "server-only";
 
-import { query } from "../db";
-import { buildCategoryTree, flattenCategoryTree, type CategoryKind, type CategoryNode } from "../categories";
+import { query, queryOne } from "../db";
+import { buildCategoryTree, flattenCategoryTree, isSupportedCategory, type CategoryKind, type CategoryNode } from "../categories";
 import type { CategoryRow } from "../types";
 
 /**
@@ -27,7 +27,7 @@ export async function listCategoryTree(
   const kindClause = kind ? "AND kind = ?" : "";
   const rows = await query<CategoryRow>(
     `SELECT * FROM categories
-      WHERE (store_id IS NULL OR store_id = ?) ${kindClause}
+      WHERE (store_id IS NULL OR store_id = ?) AND kind = 'product' ${kindClause}
       ORDER BY (store_id IS NULL) ASC, position ASC, name ASC`,
     kind ? [storeId, kind] : [storeId],
   );
@@ -44,7 +44,7 @@ export async function listCategoryTree(
 export async function listMainCategories(): Promise<CategoryNode[]> {
   const rows = await query<CategoryRow>(
     `SELECT * FROM categories
-      WHERE store_id IS NULL AND parent_id IS NULL
+      WHERE store_id IS NULL AND kind = 'product'
       ORDER BY position ASC, name ASC`,
   );
 
@@ -53,6 +53,9 @@ export async function listMainCategories(): Promise<CategoryNode[]> {
 
 /** The ids of a category and everything under it, for a subtree query. */
 export async function categorySubtreeIdList(id: string): Promise<string[]> {
+  const category = await queryOne<CategoryRow>("SELECT * FROM categories WHERE id = ? AND kind = 'product'", [id]);
+  // An invalid/retired URL must never silently widen into every product.
+  if (!category || !isSupportedCategory(category)) return ["__unavailable_category__"];
   const rows = await query<CategoryRow>(
     `WITH RECURSIVE branch(id) AS (
        SELECT id FROM categories WHERE id = ?

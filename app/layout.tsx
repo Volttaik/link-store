@@ -12,53 +12,49 @@ import "./globals.css";
  */
 const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:5000";
 
-const title = "LINK STORE · One link. Everything you sell.";
+const title = "Rush Cart";
 const description =
-  "Link Store is a universal commerce platform. Sell products, food, services, events, tickets and digital files from one shareable storefront link.";
+  "Discover and sell products on Rush Cart. Explore stores, meet sellers and shop curated product collections.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
   title: {
     default: title,
-    template: "%s · LINK STORE",
+    template: "%s — Rush Cart",
   },
   description,
-  applicationName: "LINK STORE",
+  applicationName: "Rush Cart",
+  manifest: "/manifest.webmanifest",
   keywords: [
     "online store",
     "marketplace",
     "sell online",
     "storefront",
     "Nigeria",
-    "digital products",
-    "event tickets",
   ],
-  // The LINK ICON, generated with the platform's own mark — the same glyph the
-  // email shell wears (`scripts/generate-brand-assets.mjs`). Next serves these
-  // file-convention icons at /icon.png, /apple-icon.png and /favicon.ico.
+  // Generated from the actual Rush Cart PNG, preserving its aspect ratio.
   icons: {
     icon: [{ url: "/icon.png", type: "image/png", sizes: "32x32" }],
     apple: [{ url: "/apple-icon.png", type: "image/png", sizes: "180x180" }],
   },
   appleWebApp: {
     capable: true,
-    title: "LINK STORE",
+    title: "Rush Cart",
     statusBarStyle: "default",
   },
   openGraph: {
     title,
     description:
-      "Create a storefront link and sell products, food, services, events and digital products in one place.",
+      "Find what you love. Discover independent shops and curated product collections.",
     url: appUrl,
-    siteName: "LINK STORE",
+    siteName: "Rush Cart",
     type: "website",
     locale: "en",
     images: [
       {
-        url: "/brand/link-share.png",
-        width: 800,
-        height: 800,
-        alt: "LINK STORE — the chain-link mark",
+        url: "/brand/rush-cart-logo.png",
+        
+        alt: "Rush Cart",
       },
     ],
   },
@@ -66,7 +62,7 @@ export const metadata: Metadata = {
     card: "summary",
     title,
     description,
-    images: ["/brand/link-share.png"],
+    images: ["/brand/rush-cart-logo.png"],
   },
   robots: { index: true, follow: true },
 };

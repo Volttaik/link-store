@@ -30,7 +30,7 @@ export function EmptyConversationState({
       </div>
 
       <div className="space-y-1.5">
-        <h2 className="text-[17px] font-semibold tracking-tight text-foreground">
+        <h2 className="text-[15px] font-semibold tracking-tight text-foreground">
           {title ?? "Your conversations"}
         </h2>
         <p className="max-w-xs text-[12.5px] leading-relaxed text-muted">

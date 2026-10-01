@@ -44,8 +44,7 @@ export function MarketplaceFooter() {
               <Wordmark />
             </div>
             <p className="mt-4 max-w-xs text-[13px] leading-relaxed text-muted">
-              One link. Everything you sell. Products, food, services, events, tickets and digital
-              files from a single storefront.
+              Find what you love. Discover independent shops and curated collections.
             </p>
           </div>
 
@@ -58,7 +57,7 @@ export function MarketplaceFooter() {
                     href={`/${section.slug}`}
                     className="text-[13px] text-muted no-underline hover:text-foreground"
                   >
-                    {section.label}
+                    {section.slug === "products" ? "Marketplace" : section.label}
                   </Link>
                 </li>
               ))}
@@ -88,7 +87,8 @@ export function MarketplaceFooter() {
 
         {/* Spacing alone separates the colophon; no rule, no line. */}
         <div className="mt-12 flex flex-col gap-2 text-xs text-muted sm:flex-row sm:items-center sm:justify-between">
-          <p>© {year} LINK STORE</p>
+          <p>© {year} Rush Cart</p>
+          <nav aria-label="Legal and support" className="flex flex-wrap gap-3">{[{ href: "/privacy", label: "Privacy" }, { href: "/terms", label: "Terms" }, { href: "/cookies", label: "Cookies" }, { href: "/faq", label: "FAQ" }, { href: "/support", label: "Support" }].map(item => <Link key={item.href} href={item.href} className="text-xs text-muted">{item.label}</Link>)}</nav>
           <p>Secure payments powered by Paystack</p>
         </div>
       </div>

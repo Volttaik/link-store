@@ -32,9 +32,13 @@ export const metadata: Metadata = {
     "storefront",
     "Nigeria",
   ],
-  // Generated from the actual Rush Cart PNG, preserving its aspect ratio.
+  // The tab icon: the vector mark where the browser supports SVG favicons,
+  // with the generated 32px PNG (and the 180px apple-touch icon) behind it.
   icons: {
-    icon: [{ url: "/icon.png", type: "image/png", sizes: "32x32" }],
+    icon: [
+      { url: "/brand/rush-cart-logo.svg", type: "image/svg+xml", sizes: "any" },
+      { url: "/icon.png", type: "image/png", sizes: "32x32" },
+    ],
     apple: [{ url: "/apple-icon.png", type: "image/png", sizes: "180x180" }],
   },
   appleWebApp: {

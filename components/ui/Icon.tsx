@@ -308,9 +308,11 @@ export function Icon({
  */
 export function BrandMark({ className = "h-7 w-12" }: { className?: string }) {
   return (
-    // The supplied asset is contained, never stretched or cropped.
+    // Vector artwork: it stays sharp from a 20px auth-card mark to a 160px
+    // order-receipt header, where a raster would soften as it scales down.
+    // Contained, never stretched or cropped.
     // eslint-disable-next-line @next/next/no-img-element
-    <img alt="Rush Cart" className={`object-contain ${className}`} src="/brand/rush-cart-logo.png" />
+    <img alt="Rush Cart" className={`object-contain ${className}`} src="/brand/rush-cart-logo.svg" />
   );
 }
 

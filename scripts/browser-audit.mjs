@@ -104,7 +104,7 @@ export async function auditBrowser(base, cookie, buyerCookie) {
       await goto(route);
       for (const width of [320, 430, 768, 1280, 1600]) {
         await call('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: width < 768 }); await pause(250);
-        const geometry = await evaluate(`({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth, badLogo: [...document.querySelectorAll('header a[href="/"] img[src="/brand/rush-cart-logo.png"]')].some(img => getComputedStyle(img).objectFit !== 'contain') })`);
+        const geometry = await evaluate(`({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth, badLogo: [...document.querySelectorAll('header a[href="/"] img[src="/brand/rush-cart-logo.svg"]')].some(img => getComputedStyle(img).objectFit !== 'contain') })`);
         assert.ok(geometry.scroll <= geometry.width + 1, `${route} overflow at ${width}: ${JSON.stringify(geometry)}`); assert.equal(geometry.badLogo, false);
         const escaped = await evaluate(`(() => { const bad = []; for (const card of document.querySelectorAll('[data-product-card]')) { const box = card.getBoundingClientRect(); for (const control of card.querySelectorAll('button, a, img')) { const rect = control.getBoundingClientRect(); if (rect.width && (rect.left < box.left - 1 || rect.right > box.right + 1 || rect.bottom > box.bottom + 1)) bad.push(card.dataset.productCard + ':' + control.tagName); } } return bad; })()`);
         assert.deepEqual(escaped, [], `${route}: card boundary at ${width}`);
